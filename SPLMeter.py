@@ -11,11 +11,10 @@ class SPLMeter:
         self.uiHandler = UIHandler.UIHandler()
         self.audioProcessor = AudioProcessor.AudioProcessor()
 
-        print("SPLMeter: Testing audio processing with generated noise")
-        
+        # Testing audio processing with generated noise
         noise = self.generate_noise()
         spl_db = self.audioProcessor.compute_spl_db(noise)
-        print(f"Computed SPL (dB): {spl_db:.2f} dB")
+        print(f"Computed SPL: {spl_db:.2f} dB")
 
     def generate_noise(self, duration_seconds=1, sample_rate=44100):
         num_samples = duration_seconds * sample_rate

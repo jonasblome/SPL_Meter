@@ -11,7 +11,7 @@ class AudioProcessor:
         rms = self.compute_rms(audio_data)
 
         if rms == 0:
-            return -np.inf  # Return negative infinity if the signal is silent
+            return -np.inf # Return negative infinity if the signal is silent
         
         spl_db = 20 * np.log10(rms / reference_pressure)
         
