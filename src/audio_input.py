@@ -118,7 +118,7 @@ def main():
     print("=" * 40)
     
     # Create reader instance (device_index=0 = googlevoicehat I2S microphone)
-    reader = ICS43434Reader(sample_rate=44100, chunk_size=1024, device_index=0)
+    reader = ICS43434Reader(sample_rate=48000, chunk_size=1024, device_index=0)
     
     # List available devices
     reader.list_devices()
