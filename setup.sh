@@ -14,7 +14,8 @@ sudo apt install -y \
     python3-pip \
     python3-venv \
     libopenblas-dev \
-    portaudio19-dev
+    portaudio19-dev \
+    raspi-gpio
 
 # 2. I2S-Konfiguration prüfen
 echo ""
@@ -30,9 +31,9 @@ if ! grep -q "dtparam=i2s=on" "$CONFIG_FILE"; then
     echo "dtparam=i2s=on" | sudo tee -a "$CONFIG_FILE" > /dev/null
     I2S_MISSING=true
 fi
-if ! grep -q "dtoverlay=i2s-mmap" "$CONFIG_FILE"; then
-    echo "  -> dtoverlay=i2s-mmap fehlt, wird hinzugefügt..."
-    echo "dtoverlay=i2s-mmap" | sudo tee -a "$CONFIG_FILE" > /dev/null
+if ! grep -q "dtoverlay=googlevoicehat-soundcard" "$CONFIG_FILE"; then
+    echo "  -> dtoverlay=googlevoicehat-soundcard fehlt, wird hinzugefügt..."
+    echo "dtoverlay=googlevoicehat-soundcard" | sudo tee -a "$CONFIG_FILE" > /dev/null
     I2S_MISSING=true
 fi
 if [ "$I2S_MISSING" = false ]; then

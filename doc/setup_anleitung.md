@@ -93,12 +93,14 @@ sudo apt install -y \
     python3-pip \
     python3-venv \
     libopenblas-dev \
-    portaudio19-dev
+    portaudio19-dev \
+    raspi-gpio
 ```
 
 **Warum:**
 - `libopenblas-dev` — numpy benötigt diese Bibliothek zur Laufzeit (`libopenblas.so.0`)
 - `portaudio19-dev` — pyaudio benötigt diese Bibliothek zur Laufzeit
+- `raspi-gpio` — Diagnosetool zum Prüfen der GPIO/I2S-Pin-Modi
 
 ### 5. Virtual Environment einrichten und Pakete installieren
 
@@ -219,9 +221,11 @@ pip install pyaudio
 - Falls leer: `/boot/firmware/config.txt` bearbeiten und folgende Zeilen hinzufügen:
 ```
 dtparam=i2s=on
-dtoverlay=i2s-mmap
+dtoverlay=googlevoicehat-soundcard
 ```
 - Danach: `sudo reboot`
+- Prüfen ob Mikrofon erkannt wird: `arecord -l` → muss `snd_rpi_googlevoicehat_soundcar` zeigen
+- GPIO-Modus prüfen (I2S-Pins müssen ALT0 sein): `raspi-gpio get 18,19,20,21`
 
 #### 7. SSH-Verbindung schlägt fehl
 - Überprüfe SSH-Config
