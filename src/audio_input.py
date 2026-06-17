@@ -7,9 +7,9 @@ Simple I2S microphone reader for Raspberry Pi Zero W
 import time
 import numpy as np
 try:
-    import sounddevice as sd
+    import pyaudio
 except ImportError:
-    print("sounddevice not installed. Please install with: pip install sounddevice")
+    print("pyaudio not installed. Please install with: pip install pyaudio")
     exit(1)
 
 
@@ -27,9 +27,30 @@ class ICS43434Reader:
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.is_recording = False
+        self.audio = None
+        self.stream = None
         
-        # I2S device configuration for Raspberry Pi
-        self.device = 'bcm2835_i2s'  # Standard I2S device on Raspberry Pi
+    def _audio_callback(self, in_data, frame_count, time_info, status):
+        """Callback function for audio stream"""
+        # Convert byte data to numpy array (16-bit PCM)
+        audio_data = np.frombuffer(in_data, dtype=np.int16)
+        
+        # Normalize to float [-1.0, 1.0]
+        audio_float = audio_data.astype(np.float32) / 32768.0
+        
+        # Calculate RMS (Root Mean Square) for simple SPL indication
+        rms = np.sqrt(np.mean(audio_float**2))
+        
+        # Simple SPL calculation (reference: 20 micropascals)
+        if rms > 0:
+            spl_db = 20 * np.log10(rms / 0.00002)
+        else:
+            spl_db = -np.inf
+            
+        # Output raw data
+        print(f"RMS: {rms:.6f}, SPL: {spl_db:.2f} dB, Max: {np.max(np.abs(audio_float)):.6f}")
+        
+        return (in_data, pyaudio.paContinue)
         
     def start_recording(self):
         """Start recording from the microphone"""
@@ -38,50 +59,54 @@ class ICS43434Reader:
             print(f"Starting recording at {self.sample_rate} Hz...")
             print("Press Ctrl+C to stop recording")
             
-            # Audio callback function
-            def audio_callback(indata, frames, time, status):
-                if status:
-                    print(f"Audio status: {status}")
-                
-                # Calculate RMS (Root Mean Square) for simple SPL indication
-                rms = np.sqrt(np.mean(indata**2))
-                
-                # Simple SPL calculation (reference: 20 micropascals)
-                if rms > 0:
-                    spl_db = 20 * np.log10(rms / 0.00002)
-                else:
-                    spl_db = -np.inf
-                    
-                # Output raw data
-                print(f"RMS: {rms:.6f}, SPL: {spl_db:.2f} dB, Max: {np.max(np.abs(indata)):.6f}")
+            # Initialize PyAudio
+            self.audio = pyaudio.PyAudio()
             
-            # Start the audio stream
-            with sd.InputStream(
-                device=self.device,
+            # Open audio stream (default device - I2S should be configured as default)
+            self.stream = self.audio.open(
+                format=pyaudio.paInt16,
                 channels=1,
-                samplerate=self.sample_rate,
-                blocksize=self.chunk_size,
-                callback=audio_callback,
-                dtype='float32'
-            ):
-                while self.is_recording:
-                    time.sleep(0.1)
+                rate=self.sample_rate,
+                input=True,
+                frames_per_buffer=self.chunk_size,
+                stream_callback=self._audio_callback
+            )
+            
+            # Start the stream
+            self.stream.start_stream()
+            
+            # Keep the main thread alive
+            while self.is_recording and self.stream.is_active():
+                time.sleep(0.1)
                     
         except KeyboardInterrupt:
             print("\nRecording stopped by user")
         except Exception as e:
             print(f"Error during recording: {e}")
         finally:
-            self.is_recording = False
+            self.stop_recording()
     
     def stop_recording(self):
         """Stop recording"""
         self.is_recording = False
+        
+        if self.stream:
+            self.stream.stop_stream()
+            self.stream.close()
+            self.stream = None
+            
+        if self.audio:
+            self.audio.terminate()
+            self.audio = None
     
     def list_devices(self):
         """List available audio devices"""
+        audio = pyaudio.PyAudio()
         print("Available audio devices:")
-        print(sd.query_devices())
+        for i in range(audio.get_device_count()):
+            info = audio.get_device_info_by_index(i)
+            print(f"  {i}: {info['name']} (inputs: {info['maxInputChannels']})")
+        audio.terminate()
 
 
 def main():
