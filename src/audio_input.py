@@ -16,27 +16,29 @@ except ImportError:
 class ICS43434Reader:
     """Simple reader for ICS43434 I2S microphone"""
     
-    def __init__(self, sample_rate=44100, chunk_size=1024):
+    def __init__(self, sample_rate=44100, chunk_size=1024, device_index=0):
         """
         Initialize the microphone reader
         
         Args:
             sample_rate (int): Audio sample rate in Hz
             chunk_size (int): Number of samples per chunk
+            device_index (int): PyAudio device index to use
         """
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
+        self.device_index = device_index
         self.is_recording = False
         self.audio = None
         self.stream = None
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
-        # Convert byte data to numpy array (16-bit PCM)
-        audio_data = np.frombuffer(in_data, dtype=np.int16)
+        # Convert byte data to numpy array (32-bit PCM, googlevoicehat I2S driver)
+        audio_data = np.frombuffer(in_data, dtype=np.int32)
         
         # Normalize to float [-1.0, 1.0]
-        audio_float = audio_data.astype(np.float32) / 32768.0
+        audio_float = audio_data.astype(np.float32) / 2147483648.0
         
         # Calculate RMS (Root Mean Square) for simple SPL indication
         rms = np.sqrt(np.mean(audio_float**2))
@@ -62,12 +64,13 @@ class ICS43434Reader:
             # Initialize PyAudio
             self.audio = pyaudio.PyAudio()
             
-            # Open audio stream (default device - I2S should be configured as default)
+            # Open audio stream on the I2S device
             self.stream = self.audio.open(
-                format=pyaudio.paInt16,
-                channels=1,
+                format=pyaudio.paInt32,
+                channels=2,
                 rate=self.sample_rate,
                 input=True,
+                input_device_index=self.device_index,
                 frames_per_buffer=self.chunk_size,
                 stream_callback=self._audio_callback
             )
@@ -114,8 +117,8 @@ def main():
     print("ICS43434 Microphone Reader")
     print("=" * 40)
     
-    # Create reader instance
-    reader = ICS43434Reader(sample_rate=44100, chunk_size=1024)
+    # Create reader instance (device_index=0 = googlevoicehat I2S microphone)
+    reader = ICS43434Reader(sample_rate=44100, chunk_size=1024, device_index=0)
     
     # List available devices
     reader.list_devices()

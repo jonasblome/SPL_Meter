@@ -57,6 +57,12 @@ sudo apt upgrade -y
 
 ## Software-Installation
 
+> **Tipp:** Alle Schritte 1–5 sind im Skript `setup.sh` automatisiert. Einfach ausführen:
+> ```bash
+> cd ~/projects/SPL_Meter
+> bash setup.sh
+> ```
+
 ### 1. Git installieren
 
 ```bash
@@ -66,7 +72,8 @@ sudo apt install git -y
 ### 2. Repository klonen
 
 ```bash
-cd ~
+mkdir -p ~/projects
+cd ~/projects
 git clone https://github.com/jonasblome/SPL_Meter.git
 cd SPL_Meter
 ```
@@ -74,28 +81,34 @@ cd SPL_Meter
 ### 3. In den richtigen Branch wechseln
 
 ```bash
-git branch -a
 git checkout Mikrophone-Setup
 ```
 
-### 4. Python-Abhängigkeiten installieren
+### 4. Systemabhängigkeiten installieren
 
-**Option A: Über apt (empfohlen für Zero W)**
+Diese Pakete werden zwingend benötigt, bevor pip-Pakete funktionieren:
+
 ```bash
-sudo apt install python3-numpy python3-sounddevice -y
+sudo apt install -y \
+    python3-pip \
+    python3-venv \
+    libopenblas-dev \
+    portaudio19-dev
 ```
 
-**Option B: Virtual Environment (falls apt nicht funktioniert)**
+**Warum:**
+- `libopenblas-dev` — numpy benötigt diese Bibliothek zur Laufzeit (`libopenblas.so.0`)
+- `portaudio19-dev` — pyaudio benötigt diese Bibliothek zur Laufzeit
+
+### 5. Virtual Environment einrichten und Pakete installieren
+
 ```bash
 python3 -m venv spl_meter_env
 source spl_meter_env/bin/activate
-pip install -r requirements.txt
+pip install --only-binary :all: -r requirements.txt
 ```
 
-**Option C: Force Installation (nicht empfohlen)**
-```bash
-pip install -r requirements.txt --break-system-packages
-```
+> **Wichtig:** `--only-binary :all:` verhindert, dass pip versucht, Pakete aus dem Quellcode zu kompilieren. Auf dem Pi Zero W würde das den Pi zum Einfrieren bringen oder stundenlang dauern. piwheels.org stellt fertige ARM-Wheels bereit.
 
 ## Tailscale Einrichtung (für Remote-Zugriff)
 
@@ -180,26 +193,37 @@ RMS: 0.000098, SPL: 43.82 dB, Max: 0.000234
 sudo apt install git -y
 ```
 
-#### 2. "pip3: command not found"
+#### 2. "externally-managed-environment" Fehler
+Niemals `pip install` direkt (ohne venv) ausführen. Immer Virtual Environment nutzen (siehe Schritt 5).
+
+#### 3. pip installiert numpy aus Quellcode / Pi friert ein
+`requirements.txt` verwendet `numpy==2.2.4` (gepinnte Version mit piwheels-Wheel).  
+Immer `--only-binary :all:` verwenden:
 ```bash
-sudo apt install python3-pip -y
+pip install --only-binary :all: -r requirements.txt
 ```
 
-#### 3. "externally-managed-environment" Fehler
-Nutze Virtual Environment oder apt-Installation (siehe oben).
-
-#### 4. "sounddevice" nicht gefunden
+#### 4. "libopenblas.so.0: cannot open shared object file"
 ```bash
-sudo apt install python3-dev portaudio19-dev -y
-pip install sounddevice --break-system-packages
+sudo apt install libopenblas-dev -y
 ```
 
-#### 5. Kein Audio-Gerät gefunden
-- Prüfe I2S-Konfiguration in `/boot/config.txt`
-- Stelle sicher, dass das Mikrofon korrekt angeschlossen ist
-- Starte den Pi neu
+#### 5. "Could not import the PyAudio C module 'pyaudio._portaudio'"
+```bash
+sudo apt install portaudio19-dev -y
+pip install pyaudio
+```
 
-#### 6. SSH-Verbindung schlägt fehl
+#### 6. Kein Audio-Gerät gefunden (`Invalid input device`)
+- I2S-Treiber noch nicht aktiv — prüfen mit `arecord -l`
+- Falls leer: `/boot/firmware/config.txt` bearbeiten und folgende Zeilen hinzufügen:
+```
+dtparam=i2s=on
+dtoverlay=i2s-mmap
+```
+- Danach: `sudo reboot`
+
+#### 7. SSH-Verbindung schlägt fehl
 - Überprüfe SSH-Config
 - Stelle sicher, dass Tailscale läuft
 - Prüfe Benutzername in SSH-Config
