@@ -31,6 +31,10 @@ class ICS43434Reader:
         self.is_recording = False
         self.audio = None
         self.stream = None
+        self.latest_rms = 0.0
+        self.latest_spl_db = 0.0
+        self.latest_peak = 0.0
+        self.last_error = None  
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -51,7 +55,11 @@ class ICS43434Reader:
             spl_db = 20 * np.log10(rms / 0.00002)
         else:
             spl_db = -np.inf
-            
+        #Save the data
+        peak = np.max(np.abs(audio_float))
+        self.latest_rms = float(rms)
+        self.latest_spl_db = float(spl_db)
+        self.latest_peak = float(np.max(np.abs(audio_float)))    
         # Output raw data
         print(f"RMS: {rms:.6f}, SPL: {spl_db:.2f} dB, Max: {np.max(np.abs(audio_float)):.6f}")
         
