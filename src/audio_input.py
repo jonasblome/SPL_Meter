@@ -2,6 +2,7 @@
 """
 Audio Input Module for ICS43434 Microphone
 Simple I2S microphone reader for Raspberry Pi Zero W
+
 """
 
 import time
