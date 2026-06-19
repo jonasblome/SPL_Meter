@@ -73,10 +73,11 @@ class AudioProcessor:
         
         return spl_db
     
-    def design_a_weighting_filterbank(self, sample_rate):
-        octave_ratio = 10**(3/10) # 3 dB pro Oktave entspricht einem Faktor von 10^(3/10)
-        band_lower_freqs = np.array(list(self.frequency_weights_octave.keys())) * octave_ratio**(-1/2)
-        band_upper_freqs = np.array(list(self.frequency_weights_octave.keys())) * octave_ratio**(1/2)
+    def design_a_weighting_filterbank(self, sample_rate, is_octave=True):
+        octave_ratio = 10**(3/10) if is_octave else 10**(1/10)
+        frequency_weights = self.frequency_weights_octave if is_octave else self.frequency_weights_3rd_octave
+        band_lower_freqs = np.array(list(frequency_weights.keys())) * octave_ratio**(-1/2)
+        band_upper_freqs = np.array(list(frequency_weights.keys())) * octave_ratio**(1/2)
 
         # nyquist_freq = sample_rate / 2 - 1
         # band_upper_freqs = np.minimum(band_upper_freqs, nyquist_freq)
@@ -105,11 +106,13 @@ class AudioProcessor:
         
         return filtered_signals
         
-    def compute_a_weighting(self, filtered_signals):
+    def compute_a_weighting(self, filtered_signals, is_octave=True):
+        frequency_weights = self.frequency_weights_octave if is_octave else self.frequency_weights_3rd_octave
+
         weighted_signal = np.zeros_like(filtered_signals[0])
         for i, filtered_signal in enumerate(filtered_signals):
-            band_center_freq = list(self.frequency_weights_octave.keys())[i]
-            weight_db = self.frequency_weights_octave[band_center_freq]
+            band_center_freq = list(frequency_weights.keys())[i]
+            weight_db = frequency_weights[band_center_freq]
             weight_linear = 10 ** (weight_db / 20)
             weighted_signal += filtered_signal * weight_linear
         

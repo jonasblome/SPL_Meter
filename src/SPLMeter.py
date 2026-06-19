@@ -17,9 +17,10 @@ class SPLMeter:
         print(f"Computed SPL: {spl_db:.2f} dB")
 
         # Testing A-weighting
-        a_weighting_filterbank = self.audioProcessor.design_a_weighting_filterbank(48000)
+        is_octave = True
+        a_weighting_filterbank = self.audioProcessor.design_a_weighting_filterbank(48000, is_octave)
         filtered_signals = self.audioProcessor.apply_filterbank(noise, a_weighting_filterbank)
-        spl_a_weighted = self.audioProcessor.compute_a_weighting(filtered_signals)
+        spl_a_weighted = self.audioProcessor.compute_a_weighting(filtered_signals, is_octave)
         print(f"Computed A-weighted SPL: {spl_a_weighted:.2f} dB")
 
         # Output SPL for each band
