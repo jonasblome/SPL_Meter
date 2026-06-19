@@ -13,14 +13,16 @@ Dieses Projekt implementiert ein einfaches SPL (Sound Pressure Level) Meter auf 
 │  Hardware Layer                                            │
 │  ┌─────────────┐                                           │
 │  │ ICS43434    │ I2S Interface                            │
-│  │ Mikrofon    │ GPIO 18, 19, 21                          │
+│  │ Mikrofon    │ GPIO 18, 19, 20, 21                      │
+│  │             │ Sel → GND (linker Kanal)                 │
 │  └─────────────┘                                           │
 ├─────────────────────────────────────────────────────────────┤
 │  Software Layer                                            │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │           Audio Input Module                        │   │
+│  │           Audio Device Manager                    │   │
 │  │  • I2S-Kommunikation                               │   │
 │  │  • Audio-Stream-Management                         │   │
+│  │  • Geräte-Enumeration                              │   │
 │  │  • RMS-Berechnung                                  │   │
 │  │  • SPL-Umrechnung                                  │   │
 │  └─────────────────────────────────────────────────────┘   │
@@ -43,19 +45,20 @@ Dieses Projekt implementiert ein einfaches SPL (Sound Pressure Level) Meter auf 
 
 ## Module-Struktur
 
-### 1. Audio Input Module (`src/audio_input.py`)
+### 1. Audio Device Manager (`src/AudioDeviceManager.py`)
 
 **Verantwortlichkeiten:**
 - I2S-Mikrofon-Initialisierung
 - Audio-Stream-Management
+- Geräte-Enumeration und -Auswahl
 - Echtzeit-Audioverarbeitung
 - RMS-Berechnung
 - SPL-Umrechnung
 
 **Hauptkomponenten:**
-- `ICS43434Reader` Klasse
+- `AudioDeviceManager` Klasse
 - Audio-Callback-Funktion
-- Geräte-Konfiguration
+- Konfigurierbare Geräteauswahl über `device_index`
 
 ### 2. Output Module (geplant)
 
@@ -83,9 +86,9 @@ ICS43434 Mikrofon
 ## Technische Spezifikationen
 
 ### Audio-Parameter
-- **Abtastrate:** 44.1 kHz (konfigurierbar)
-- **Bit-Tiefe:** 32-bit Float
-- **Kanäle:** 1 (Mono)
+- **Abtastrate:** 48 kHz (konfigurierbar)
+- **Bit-Tiefe:** 32-bit PCM (I2S-Treiber), 24-bit effektive Daten
+- **Kanäle:** 2 (Stereo, ICS43434 liefert links/rechts)
 - **Chunk-Größe:** 1024 Samples
 
 ### SPL-Berechnung
@@ -99,10 +102,18 @@ ICS43434 Mikrofon
 - Raspberry Pi Zero W
 - I2S-fähiges Mikrofon (ICS43434)
 - Aktiviertes I2S-Interface
+- `dtoverlay=googlevoicehat-soundcard` in `/boot/firmware/config.txt`
 
 ### Python-Pakete
 - `numpy`: Numerische Berechnungen
-- `sounddevice`: Audio-I/O
+- `pyaudio`: Audio-I/O
+
+### System-Pakete (über apt)
+- `python3-pip`: Python-Paketmanager
+- `python3-venv`: Virtual Environment
+- `libopenblas-dev`: Laufzeitbibliothek für numpy
+- `portaudio19-dev`: Laufzeitbibliothek für pyaudio
+- `raspi-gpio`: Diagnosetool für GPIO-Pin-Modi
 
 ## Erweiterungsmöglichkeiten
 
