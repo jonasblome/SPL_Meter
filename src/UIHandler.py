@@ -3,7 +3,6 @@ import time
 import threading
 from pathlib import Path
 import streamlit as st
-from AudioDeviceManager import AudioDeviceManager
 
 class UIHandler:
     def __init__(self, audio_device_manager):
@@ -32,6 +31,9 @@ class UIHandler:
         if "recording_thread" not in st.session_state:
             st.session_state.recording_thread = None
 
+        if "measurement_status" not in st.session_state:
+            st.session_state.measurement_status = "Stopped"
+
         # Add start/stop measurement buttons
         col1, col2 = st.columns(2)
 
@@ -59,36 +61,43 @@ class UIHandler:
         st.divider()
 
         # Add status
-        status = "Running" if self.audio_device_manager.is_recording else "Stopped"
+        status = st.session_state.measurement_status
         st.subheader(f"Status: {status}")
 
         st.divider()
 
-        # Add metrics display
+        # Add metrics display placeholders
         metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 
-        metric_col1.metric("SPL", f"{self.audio_device_manager.latest_spl_db:.2f} dB")
-        metric_col2.metric("RMS", f"{self.audio_device_manager.latest_rms:.2f}")
-        metric_col3.metric("Peak", f"{self.audio_device_manager.latest_peak:.2f}")
-        metric_col4.metric("Time Weighted", f"{self.audio_device_manager.latest_time_weighted_value:.2f}")
+        spl_metric = metric_col1.empty()
+        rms_metric = metric_col2.empty()
+        peak_metric = metric_col3.empty()
+        time_weighted_metric = metric_col4.empty()
 
-        st.divider()
+        def render_metrics():
+            spl_metric.metric("SPL", f"{st.session_state.audio_device_manager.latest_spl_db:.2f} dB")
+            rms_metric.metric("RMS", f"{st.session_state.audio_device_manager.latest_rms:.2f}")
+            peak_metric.metric("Peak", f"{st.session_state.audio_device_manager.latest_peak:.2f}")
+            time_weighted_metric.metric("Time Weighted", f"{st.session_state.audio_device_manager.latest_time_weighted_value:.2f}")
 
-        # Add refresh button
-        # if st.button("Refresh values"):
-        #     st.rerun()
-        
-        # Auto-refresh every 0.2 seconds
-        # time.sleep(0.2)
-        # st.rerun()
+        render_metrics()
+
+        while st.session_state.audio_device_manager.is_recording:
+            render_metrics()
+            time.sleep(0.2)
 
     def start_recording_thread(self):
         if st.session_state.recording_thread is None or not st.session_state.recording_thread.is_alive():
             thread = threading.Thread(target=st.session_state.audio_device_manager.start_recording, daemon=True)
             st.session_state.recording_thread = thread
             thread.start()
+            st.session_state.measurement_status = "Running"
 
     def stop_recording_thread(self):
         if st.session_state.recording_thread is not None and st.session_state.recording_thread.is_alive():
             st.session_state.audio_device_manager.stop_recording()
-            st.session_state.recording_thread.join()
+            st.session_state.recording_thread.join(timeout=2)
+            if st.session_state.recording_thread.is_alive():
+                print("Warning: recording thread did not exit within timeout.")
+                
+        st.session_state.measurement_status = "Stopped"

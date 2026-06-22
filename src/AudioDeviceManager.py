@@ -71,7 +71,7 @@ class AudioDeviceManager:
         self.latest_time_weighted_value = float(latest_time_weighted_value)
 
         # Output raw data
-        print(f"RMS: {rms:.6f}, SPL: {spl_db:.2f} dB, Peak: {peak:.6f}")
+        # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
         
         return (in_data, pyaudio.paContinue)
         
@@ -113,15 +113,27 @@ class AudioDeviceManager:
     def stop_recording(self):
         """Stop recording"""
         self.is_recording = False
-        
+
         if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
-            
+            try:
+                if self.stream.is_active():
+                    self.stream.stop_stream()
+            except Exception as e:
+                print(f"Error stopping stream: {e}")
+            try:
+                self.stream.close()
+            except Exception as e:
+                print(f"Error closing stream: {e}")
+            finally:
+                self.stream = None
+
         if self.audio:
-            self.audio.terminate()
-            self.audio = None
+            try:
+                self.audio.terminate()
+            except Exception as e:
+                print(f"Error terminating audio: {e}")
+            finally:
+                self.audio = None
     
     def list_devices(self):
         """List available audio devices"""
