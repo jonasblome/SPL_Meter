@@ -35,6 +35,12 @@ class ICS43434Reader:
         self.latest_spl_db = 0.0
         self.latest_peak = 0.0
         self.last_error = None  
+        # Time weighting (Fast / Slow)
+        self.time_weighting = "Fast"
+        self.filtered_spl_db = 0.0
+        # smoothing factors
+        self.alpha_fast = 0.2
+        self.alpha_slow = 0.02
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -58,7 +64,16 @@ class ICS43434Reader:
         #Save the data
         peak = np.max(np.abs(audio_float))
         self.latest_rms = float(rms)
-        self.latest_spl_db = float(spl_db)
+        # ===== Time weighting =====
+        if self.time_weighting == "Fast":
+            alpha = self.alpha_fast
+        else:
+            alpha = self.alpha_slow
+
+        # Exponential Moving Average
+        self.filtered_spl_db = alpha * spl_db + (1 - alpha) * self.filtered_spl_db
+
+        self.latest_spl_db = float(self.filtered_spl_db)
         self.latest_peak = float(np.max(np.abs(audio_float)))    
         # Output raw data
         print(f"RMS: {rms:.6f}, SPL: {spl_db:.2f} dB, Max: {np.max(np.abs(audio_float)):.6f}")

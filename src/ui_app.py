@@ -55,6 +55,14 @@ with col2:
 
 
 st.divider()
+# ===== Time Weighting  =====
+weighting = st.radio(
+    "Time Weighting",
+    ["Fast", "Slow"],
+    horizontal=True
+)
+
+reader.time_weighting = weighting
 
 status = "Running" if reader.is_recording else "Stopped"
 st.subheader(f"Status: {status}")
@@ -74,3 +82,5 @@ st.info(
 
 if st.button("Refresh values"):
     st.rerun()
+time.sleep(0.2)
+st.rerun()
