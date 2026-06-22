@@ -61,9 +61,11 @@ class AudioProcessor:
         print("AudioProcessor: Initializing")
 
         self.sample_rate = sample_rate
-
         self.fast_state = 0.0
         self.slow_state = 0.0
+    
+    def compute_peak(self, audio_data):
+        return np.max(np.abs(audio_data))
 
     def compute_rms(self, audio_data):
         return np.sqrt(np.mean(audio_data**2))
