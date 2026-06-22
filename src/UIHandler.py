@@ -88,16 +88,15 @@ class UIHandler:
 
     def start_recording_thread(self):
         if st.session_state.recording_thread is None or not st.session_state.recording_thread.is_alive():
+            st.session_state.measurement_status = "Running"
             thread = threading.Thread(target=st.session_state.audio_device_manager.start_recording, daemon=True)
             st.session_state.recording_thread = thread
             thread.start()
-            st.session_state.measurement_status = "Running"
 
     def stop_recording_thread(self):
+        st.session_state.measurement_status = "Stopped"
         if st.session_state.recording_thread is not None and st.session_state.recording_thread.is_alive():
             st.session_state.audio_device_manager.stop_recording()
             st.session_state.recording_thread.join(timeout=2)
             if st.session_state.recording_thread.is_alive():
                 print("Warning: recording thread did not exit within timeout.")
-                
-        st.session_state.measurement_status = "Stopped"
