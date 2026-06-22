@@ -10,28 +10,28 @@ Dieses Projekt implementiert ein einfaches SPL (Sound Pressure Level) Meter auf 
 ┌─────────────────────────────────────────────────────────────┐
 │                    Raspberry Pi Zero W                      │
 ├─────────────────────────────────────────────────────────────┤
-│  Hardware Layer                                            │
-│  ┌─────────────┐                                           │
-│  │ ICS43434    │ I2S Interface                            │
-│  │ Mikrofon    │ GPIO 18, 19, 20, 21                      │
-│  │             │ Sel → GND (linker Kanal)                 │
-│  └─────────────┘                                           │
+│  Hardware Layer                                             │
+│  ┌─────────────┐                                            │
+│  │ ICS43434    │ I2S Interface                              │
+│  │ Mikrofon    │ GPIO 18, 19, 20, 21                        │
+│  │             │ Sel → GND (linker Kanal)                   │
+│  └─────────────┘                                            │
 ├─────────────────────────────────────────────────────────────┤
-│  Software Layer                                            │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │           Audio Device Manager                    │   │
-│  │  • I2S-Kommunikation                               │   │
-│  │  • Audio-Stream-Management                         │   │
-│  │  • Geräte-Enumeration                              │   │
-│  │  • RMS-Berechnung                                  │   │
-│  │  • SPL-Umrechnung                                  │   │
-│  └─────────────────────────────────────────────────────┘   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              Output Module                          │   │
-│  │  • Terminal-Ausgabe                                │   │
-│  │  • Datenformatierung                               │   │
-│  │  • Echtzeit-Display                                │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  Software Layer                                             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │           Audio Device Manager                      │    │
+│  │  • I2S-Kommunikation                                │    │
+│  │  • Audio-Stream-Management                          │    │
+│  │  • Geräte-Enumeration                               │    │
+│  │  • RMS-Berechnung                                   │    │
+│  │  • SPL-Umrechnung                                   │    │
+│  └─────────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              Output Module                          │    │
+│  │  • Terminal-Ausgabe                                 │    │
+│  │  • Datenformatierung                                │    │
+│  │  • Echtzeit-Display                                 │    │
+│  └─────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────┤
 │  Application Layer                                         │
 │  ┌─────────────────────────────────────────────────────┐   │
