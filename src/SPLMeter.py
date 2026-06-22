@@ -7,7 +7,6 @@ class SPLMeter:
     def __init__(self):
         print("SPLMeter: Initializing")
 
-        self.audioDeviceManager = AudioDeviceManager.AudioDeviceManager()
         self.uiHandler = UIHandler.UIHandler()
         self.audioProcessor = AudioProcessor.AudioProcessor()
 
@@ -27,6 +26,11 @@ class SPLMeter:
         spl_db_list = [self.audioProcessor.compute_spl_db(filtered_signal) for filtered_signal in filtered_signals]
         for i, spl in enumerate(spl_db_list):
             print(f"Computed SPL for band {i+1}: {spl:.2f} dB")
+
+        # Create reader instance (device_index=0 = googlevoicehat I2S microphone)
+        self.audioDeviceManager = AudioDeviceManager(sample_rate=48000, chunk_size=1024, device_index=0)
+        self.audioDeviceManager.list_devices()
+        self.audioDeviceManager.start_recording()
 
     def generate_noise(self, duration_seconds=1, sample_rate=48000):
         num_samples = duration_seconds * sample_rate
