@@ -85,7 +85,7 @@ class AudioProcessor:
         return np.exp(-1.0 / (self.sample_rate * tau))
     
     def update_time_weighting_state(self, sample, old_state, tau):
-        a = self.compute_time_weighting_factor(tau)
+        a = self.compute_time_weighted_factor(tau)
 
         current_squared_pressure = sample ** 2
 

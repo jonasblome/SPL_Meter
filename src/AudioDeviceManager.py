@@ -26,10 +26,10 @@ class AudioDeviceManager:
             device_index (int): PyAudio device index to use
         """
         print("AudioDeviceManager: Initializing")
-        # self.list_devices()
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.device_index = device_index
+        self.num_channels = 2
         self.is_recording = False
         self.audio = None
         self.stream = None
@@ -88,7 +88,7 @@ class AudioDeviceManager:
             # Open audio stream on the I2S device
             self.stream = self.audio.open(
                 format=pyaudio.paInt32,
-                channels=2,
+                channels=self.num_channels,
                 rate=self.sample_rate,
                 input=True,
                 input_device_index=self.device_index,
@@ -131,3 +131,26 @@ class AudioDeviceManager:
             info = audio.get_device_info_by_index(i)
             print(f"  {i}: {info['name']} (inputs: {info['maxInputChannels']})")
         audio.terminate()
+
+    def get_num_channels_of_current_device(self):
+        """Get the number of channels for the current device index"""
+        if self.device_index is None:
+            raise ValueError("Device index is not set. Please set it using set_device_index() method.")
+        
+        audio = pyaudio.PyAudio()
+        try:
+            info = audio.get_device_info_by_index(self.device_index)
+            num_channels = info['maxInputChannels']
+            return num_channels
+        finally:
+            audio.terminate()
+
+    def set_device_index(self, index):
+        """Set the audio device index to use for recording"""
+        self.device_index = index
+        self.num_channels = self.get_num_channels_of_current_device()
+    
+    def generate_noise(self, num_samples=48000):
+        noise = np.random.normal(0, 1, num_samples)
+
+        return noise

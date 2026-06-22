@@ -7,29 +7,32 @@ from AudioDeviceManager import AudioDeviceManager
 
 class UIHandler:
     def __init__(self, audio_device_manager):
-        self.audio_device_manager = audio_device_manager
-
         print("UIHandler: Initializing")
+
+        self.audio_device_manager = audio_device_manager
 
         # Make sure src path is available
         CURRENT_DIR = Path(__file__).resolve().parent
         sys.path.insert(0, str(CURRENT_DIR))
 
+        # Setup UI page
         st.set_page_config(
             page_title="SPL Meter UI",
             page_icon="🎙️",
             layout="centered",
         )
 
+        # Set title and info
         st.title("🎙️ SPL Meter Web UI")
         st.write("Simple web interface for the Raspberry Pi SPL Meter.")
 
-        if "reader" not in st.session_state:
-            st.session_state.reader = self.audio_device_manager
+        if "audio_device_manager" not in st.session_state:
+            st.session_state.audio_device_manager = self.audio_device_manager
 
         if "recording_thread" not in st.session_state:
             st.session_state.recording_thread = None
 
+        # Add start/stop measurement buttons
         col1, col2 = st.columns(2)
 
         with col1:
@@ -44,6 +47,7 @@ class UIHandler:
 
         st.divider()
         
+        # Add slow/fast time weighting selection 
         weighting = st.radio(
             "Time Weighting",
             ["Fast", "Slow"],
@@ -52,9 +56,15 @@ class UIHandler:
 
         self.audio_device_manager.time_weighting = weighting
 
+        st.divider()
+
+        # Add status
         status = "Running" if self.audio_device_manager.is_recording else "Stopped"
         st.subheader(f"Status: {status}")
 
+        st.divider()
+
+        # Add metrics display
         metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 
         metric_col1.metric("SPL", f"{self.audio_device_manager.latest_spl_db:.2f} dB")
@@ -64,23 +74,21 @@ class UIHandler:
 
         st.divider()
 
-        st.info(
-            "This UI reads the latest RMS, SPL and peak values from the audio callback."
-        )
-
-        if st.button("Refresh values"):
-            st.rerun()
+        # Add refresh button
+        # if st.button("Refresh values"):
+        #     st.rerun()
         
+        # Auto-refresh every 0.2 seconds
         # time.sleep(0.2)
         # st.rerun()
 
     def start_recording_thread(self):
         if st.session_state.recording_thread is None or not st.session_state.recording_thread.is_alive():
-            thread = threading.Thread(target=self.audio_device_manager.start_recording, daemon=True)
+            thread = threading.Thread(target=st.session_state.audio_device_manager.start_recording, daemon=True)
             st.session_state.recording_thread = thread
             thread.start()
 
     def stop_recording_thread(self):
         if st.session_state.recording_thread is not None and st.session_state.recording_thread.is_alive():
-            self.audio_device_manager.stop_recording()
+            st.session_state.audio_device_manager.stop_recording()
             st.session_state.recording_thread.join()
