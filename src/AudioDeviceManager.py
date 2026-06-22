@@ -14,11 +14,11 @@ except ImportError:
 
 
 class AudioDeviceManager:
-    """Simple reader for ICS43434 I2S microphone"""
+    """Manages ICS43434 I2S microphone audio input and processing"""
     
-    def __init__(self, sample_rate=44100, chunk_size=1024, device_index=0, audio_processor=None):
+    def __init__(self, sample_rate=48000, chunk_size=1024, device_index=0, audio_processor=None):
         """
-        Initialize the microphone reader
+        Initialize the audio device manager
         
         Args:
             sample_rate (int): Audio sample rate in Hz
