@@ -6,7 +6,7 @@ import streamlit as st
 from AudioDeviceManager import AudioDeviceManager
 
 class UIHandler:
-    def __init__(self):
+    def __init__(self, audio_device_manager, audio_processor):
         print("UIHandler: Initializing")
 
         # Make sure src path is available
@@ -23,21 +23,17 @@ class UIHandler:
         st.write("Simple web interface for the Raspberry Pi SPL Meter.")
 
         if "reader" not in st.session_state:
-            st.session_state.reader = AudioDeviceManager(
-                sample_rate=48000,
-                chunk_size=1024,
-                device_index=0,
-            )
+            st.session_state.reader = audio_device_manager
 
         if "recording_thread" not in st.session_state:
             st.session_state.recording_thread = None
 
-        reader = st.session_state.reader
+        # audio_device_manager = st.session_state.reader
 
 
         def start_recording_thread():
             if st.session_state.recording_thread is None or not st.session_state.recording_thread.is_alive():
-                thread = threading.Thread(target=reader.start_recording, daemon=True)
+                thread = threading.Thread(target=audio_device_manager.start_recording, daemon=True)
                 st.session_state.recording_thread = thread
                 thread.start()
 
@@ -51,25 +47,25 @@ class UIHandler:
 
         with col2:
             if st.button("Stop Measurement"):
-                reader.stop_recording()
+                audio_device_manager.stop_recording()
                 st.warning("Measurement stopped.")
 
         st.divider()
 
-        status = "Running" if reader.is_recording else "Stopped"
+        status = "Running" if audio_device_manager.is_recording else "Stopped"
         st.subheader(f"Status: {status}")
 
         metric_col1, metric_col2, metric_col3 = st.columns(3)
 
-        metric_col1.metric("SPL", f"{reader.latest_spl_db:.2f} dB")
-        metric_col2.metric("RMS", f"{reader.latest_rms:.6f}")
-        metric_col3.metric("Peak", f"{reader.latest_peak:.6f}")
+        metric_col1.metric("SPL", f"{audio_device_manager.latest_spl_db:.2f} dB")
+        metric_col2.metric("RMS", f"{audio_device_manager.latest_rms:.6f}")
+        metric_col3.metric("Peak", f"{audio_device_manager.latest_peak:.6f}")
 
         st.divider()
 
         st.info(
             "This UI reads the latest RMS, SPL and peak values from the audio callback. "
-            "The audio processing remains inside audio_input.py."
+            "The audio processing remains inside AudioDeviceManager.py."
         )
 
         if st.button("Refresh values"):

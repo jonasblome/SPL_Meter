@@ -26,6 +26,7 @@ class AudioDeviceManager:
             device_index (int): PyAudio device index to use
         """
         print("AudioDeviceManager: Initializing")
+        self.list_devices()
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.device_index = device_index
