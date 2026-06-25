@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-Audio Device Manager for ICS43434 Microphone
-Manages I2S microphone input and SPL calculation on Raspberry Pi Zero W
+Audio Input Module for ICS43434 Microphone
+Simple I2S microphone reader for Raspberry Pi Zero W
 """
 
 import time
 import numpy as np
-
 try:
     import pyaudio
 except ImportError:
@@ -15,97 +14,127 @@ except ImportError:
 
 
 class AudioDeviceManager:
-    """Manages ICS43434 I2S microphone audio input and SPL calculation"""
-
-    def __init__(self, sample_rate=48000, chunk_size=1024, device_index=0):
+    """Manages ICS43434 I2S microphone audio input and processing"""
+    
+    def __init__(self, sample_rate=48000, chunk_size=1024, device_index=0, audio_processor=None):
         """
         Initialize the audio device manager
-
+        
         Args:
             sample_rate (int): Audio sample rate in Hz
             chunk_size (int): Number of samples per chunk
             device_index (int): PyAudio device index to use
         """
+        print("AudioDeviceManager: Initializing")
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
         self.device_index = device_index
+        self.num_channels = 2
         self.is_recording = False
         self.audio = None
         self.stream = None
+        self.latest_rms = 0.0
+        self.latest_spl_db = 0.0
+        self.latest_peak = 0.0
+        self.latest_time_weighted_value = 0.0
+        self.last_error = None
+        self.time_weighting = "Fast"
 
+        self.audio_processor = audio_processor
+        
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
         # Convert byte data to numpy array (32-bit PCM, googlevoicehat I2S driver)
         audio_data = np.frombuffer(in_data, dtype=np.int32)
-
+        
         # ICS43434 is 24-bit MSB-justified in 32-bit words, shift right by 8
         audio_data = audio_data >> 8
-
+        
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
+        
+        # Compute audio metrics
+        rms = self.audio_processor.compute_rms(audio_float)
+        spl_db = self.audio_processor.compute_spl_db(audio_float)
+        peak = self.audio_processor.compute_peak(audio_float)
 
-        # Calculate RMS (Root Mean Square) for simple SPL indication
-        rms = np.sqrt(np.mean(audio_float**2))
-
-        # Simple SPL calculation (reference: 20 micropascals)
-        if rms > 0:
-            spl_db = 20 * np.log10(rms / 0.00002)
+        # Time weighting
+        if self.time_weighting == "Fast":
+            latest_time_weighted_value = self.audio_processor.compute_fast_state(audio_float)
         else:
-            spl_db = -np.inf
+            latest_time_weighted_value = self.audio_processor.compute_slow_state(audio_float)
+
+        #Save the data
+        self.latest_rms = float(rms)
+        self.latest_spl_db = float(spl_db)
+        self.latest_peak = float(peak)
+        self.latest_time_weighted_value = float(latest_time_weighted_value)
 
         # Output raw data
-        print(f"RMS: {rms:.6f}, SPL: {spl_db:.2f} dB, Max: {np.max(np.abs(audio_float)):.6f}")
-
+        # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
+        
         return (in_data, pyaudio.paContinue)
-
+        
     def start_recording(self):
         """Start recording from the microphone"""
         try:
             self.is_recording = True
             print(f"Starting recording at {self.sample_rate} Hz...")
             print("Press Ctrl+C to stop recording")
-
+            
             # Initialize PyAudio
             self.audio = pyaudio.PyAudio()
-
+            
             # Open audio stream on the I2S device
             self.stream = self.audio.open(
                 format=pyaudio.paInt32,
-                channels=2,
+                channels=self.num_channels,
                 rate=self.sample_rate,
                 input=True,
                 input_device_index=self.device_index,
                 frames_per_buffer=self.chunk_size,
                 stream_callback=self._audio_callback
             )
-
+            
             # Start the stream
             self.stream.start_stream()
-
+            
             # Keep the main thread alive
             while self.is_recording and self.stream.is_active():
                 time.sleep(0.1)
-
+                    
         except KeyboardInterrupt:
             print("\nRecording stopped by user")
         except Exception as e:
             print(f"Error during recording: {e}")
         finally:
             self.stop_recording()
-
+    
     def stop_recording(self):
         """Stop recording"""
         self.is_recording = False
 
         if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
+            try:
+                if self.stream.is_active():
+                    self.stream.stop_stream()
+            except Exception as e:
+                print(f"Error stopping stream: {e}")
+            try:
+                self.stream.close()
+            except Exception as e:
+                print(f"Error closing stream: {e}")
+            finally:
+                self.stream = None
 
         if self.audio:
-            self.audio.terminate()
-            self.audio = None
-
+            try:
+                self.audio.terminate()
+            except Exception as e:
+                print(f"Error terminating audio: {e}")
+            finally:
+                self.audio = None
+    
     def list_devices(self):
         """List available audio devices"""
         audio = pyaudio.PyAudio()
@@ -115,21 +144,25 @@ class AudioDeviceManager:
             print(f"  {i}: {info['name']} (inputs: {info['maxInputChannels']})")
         audio.terminate()
 
+    def get_num_channels_of_current_device(self):
+        """Get the number of channels for the current device index"""
+        if self.device_index is None:
+            raise ValueError("Device index is not set. Please set it using set_device_index() method.")
+        
+        audio = pyaudio.PyAudio()
+        try:
+            info = audio.get_device_info_by_index(self.device_index)
+            num_channels = info['maxInputChannels']
+            return num_channels
+        finally:
+            audio.terminate()
 
-def main():
-    """Main function for testing"""
-    print("ICS43434 Microphone Reader")
-    print("=" * 40)
+    def set_device_index(self, index):
+        """Set the audio device index to use for recording"""
+        self.device_index = index
+        self.num_channels = self.get_num_channels_of_current_device()
+    
+    def generate_noise(self, num_samples=48000):
+        noise = np.random.normal(0, 1, num_samples)
 
-    # Create manager instance (device_index=0 = googlevoicehat I2S microphone)
-    manager = AudioDeviceManager(sample_rate=48000, chunk_size=1024, device_index=0)
-
-    # List available devices
-    manager.list_devices()
-
-    # Start recording
-    manager.start_recording()
-
-
-if __name__ == "__main__":
-    main()
+        return noise

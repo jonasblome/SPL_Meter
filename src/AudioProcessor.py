@@ -61,9 +61,11 @@ class AudioProcessor:
         print("AudioProcessor: Initializing")
 
         self.sample_rate = sample_rate
-
         self.fast_state = 0.0
         self.slow_state = 0.0
+    
+    def compute_peak(self, audio_data):
+        return np.max(np.abs(audio_data))
 
     def compute_rms(self, audio_data):
         return np.sqrt(np.mean(audio_data**2))
@@ -79,7 +81,7 @@ class AudioProcessor:
         return spl_db
     
     #Zeitbewertung in fast and slow
-    def compute_time_weighted_factor(self, tau):
+    def compute_time_weighting_factor(self, tau):
         return np.exp(-1.0 / (self.sample_rate * tau))
     
     def update_time_weighting_state(self, sample, old_state, tau):
