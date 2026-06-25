@@ -33,13 +33,13 @@ Dieses Projekt implementiert ein einfaches SPL (Sound Pressure Level) Meter auf 
 │  │  • Echtzeit-Display                                 │    │
 │  └─────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────┤
-│  Application Layer                                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              Main Program                           │   │
-│  │  • Initialisierung                                 │   │
-│  │  • Steuerung                                       │   │
-│  │  • Fehlerbehandlung                                │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  Application Layer                                          │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              Main Program                           │    │
+│  │  • Initialisierung                                  │    │
+│  │  • Steuerung                                        │    │
+│  │  • Fehlerbehandlung                                 │    │
+│  └─────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
