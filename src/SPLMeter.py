@@ -15,5 +15,5 @@ class SPLMeter:
             audio_processor=self.audioProcessor
             )
         self.audioDeviceManager.list_devices()
-        self.audioDeviceManager.set_device_index(1) # Laptop microphone on Jonas' laptop
+        self.audioDeviceManager.set_device_index(2) # Laptop microphone on Jonas' laptop, comment out if not needed!
         self.uiHandler = UIHandler.UIHandler(self.audioDeviceManager)

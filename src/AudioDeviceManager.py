@@ -35,16 +35,18 @@ class AudioDeviceManager:
         self.audio = None
         self.stream = None
 
+        self.latest_filterband_spl_db = [0.0] * 8
+        self.latest_a_weighted_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_spl_db = 0.0
         self.latest_peak = 0.0
-        self.latest_time_weighted_value = 0.0
-        self.latest_a_weighted_spl_db = 0.0
-        self.latest_filterband_spl_db = [0.0] * 8
+        self.latest_fast_state = 0.0
+        self.latest_slow_state = 0.0
 
         self.last_error = None
-        self.time_weighting = "Fast"
         self.audio_processor = audio_processor
+
+        # Prepare filterbank in advance to only calculate once
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
@@ -58,28 +60,17 @@ class AudioDeviceManager:
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
         
-        # Compute audio metrics
-        rms = self.audio_processor.compute_rms(audio_float)
-        spl_db = self.audio_processor.compute_spl_db(audio_float)
-        peak = self.audio_processor.compute_peak(audio_float)
-
-        # Time weighting
-        if self.time_weighting == "Fast":
-            latest_time_weighted_value = self.audio_processor.compute_fast_state(audio_float)
-        else:
-            latest_time_weighted_value = self.audio_processor.compute_slow_state(audio_float)
-
+        # Filter audio into frequency bands
         filtered_audio = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
-        filterband_spl_db = [self.audio_processor.compute_spl_db(filtered_audio[i]) for i in range(len(filtered_audio))]
-        a_weighted_spl_db = self.audio_processor.compute_a_weighting(filtered_audio, is_octave=True)
 
-        #Save the data
-        self.latest_rms = float(rms)
-        self.latest_spl_db = float(spl_db)
-        self.latest_peak = float(peak)
-        self.latest_time_weighted_value = float(latest_time_weighted_value)
-        self.latest_a_weighted_spl_db = float(a_weighted_spl_db)
-        self.latest_filterband_spl_db = [float(spl) for spl in filterband_spl_db]
+        # Compute loudness metrics
+        self.latest_filterband_spl_db = [self.audio_processor.compute_spl_db(filtered_audio[i]) for i in range(len(filtered_audio))]
+        self.latest_a_weighted_spl_db = self.audio_processor.compute_a_weighting(filtered_audio, is_octave=True)
+        self.latest_rms = self.audio_processor.compute_rms(audio_float)
+        self.latest_spl_db = self.audio_processor.compute_spl_db(audio_float)
+        self.latest_peak = self.audio_processor.compute_peak(audio_float)
+        self.latest_fast_state = self.audio_processor.compute_fast_state(audio_float)
+        self.latest_slow_state = self.audio_processor.compute_slow_state(audio_float)
 
         return (in_data, pyaudio.paContinue)
         
