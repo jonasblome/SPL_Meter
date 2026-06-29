@@ -1,13 +1,14 @@
 import sys
 import time
 import threading
+import numpy as np
 from pathlib import Path
 import streamlit as st
+import helpers
 
 class UIHandler:
     def __init__(self, audio_device_manager):
         print("UIHandler: Initializing")
-
         self.audio_device_manager = audio_device_manager
 
         # Make sure src path is available
@@ -34,6 +35,14 @@ class UIHandler:
         if "measurement_status" not in st.session_state:
             st.session_state.measurement_status = "Stopped"
 
+        # Add toggle to store audio
+        if st.toggle("Store Audio", True):
+            st.write("Storing audio to file!")
+            st.session_state.audio_device_manager.should_store_audio = True
+        else:
+            st.write("Disabled audio file recording!")
+            st.session_state.audio_device_manager.should_store_audio = False
+
         # Add start/stop measurement buttons
         col1, col2 = st.columns(2)
 
@@ -48,17 +57,6 @@ class UIHandler:
                 st.warning("Measurement stopped.")
 
         st.divider()
-        
-        # Add slow/fast time weighting selection 
-        weighting = st.radio(
-            "Time Weighting",
-            ["Fast", "Slow"],
-            horizontal=True
-        )
-
-        self.audio_device_manager.time_weighting = weighting
-
-        st.divider()
 
         # Add status
         status = st.session_state.measurement_status
@@ -66,25 +64,77 @@ class UIHandler:
 
         st.divider()
 
-        # Add metrics display placeholders
-        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        # Add display placeholders for audio metrics
+        c1, c2, c3 = st.columns(3)
+        a_weighted_metric = c1.empty()
+        spl_metric = c2.empty()
+        rms_metric = c3.empty()
 
-        spl_metric = metric_col1.empty()
-        rms_metric = metric_col2.empty()
-        peak_metric = metric_col3.empty()
-        time_weighted_metric = metric_col4.empty()
+        c4, c5, c6 = st.columns(3)
+        peak_metric = c4.empty()
+        fast_state_metric = c5.empty()
+        slow_state_metric = c6.empty()
 
-        def render_metrics():
-            spl_metric.metric("SPL", f"{st.session_state.audio_device_manager.latest_spl_db:.2f} dB")
-            rms_metric.metric("RMS", f"{st.session_state.audio_device_manager.latest_rms:.2f}")
-            peak_metric.metric("Peak", f"{st.session_state.audio_device_manager.latest_peak:.2f}")
-            time_weighted_metric.metric("Time Weighted", f"{st.session_state.audio_device_manager.latest_time_weighted_value:.2f}")
+        # Add level meters for filterbands
+        st.subheader("Filterband SPL Levels (dB)")
+        filterband_cols = st.columns(len(helpers.frequency_weights_octave))
+        filterband_metrics = [col.empty() for col in filterband_cols]
 
-        render_metrics()
+        def render_vertical_bar(percent: float, height: int = 200):
+            # Ensure percent is between 0.0 and 1.0
+            percent_filled = max(0.0, min(1.0, percent))
+            
+            # Calculate pixel heights
+            filled_pixels = int(height * percent_filled)
+            empty_pixels = height - filled_pixels
+            
+            # Create the vertical bar using inline CSS flex/divs
+            bar_html = f"""
+            <div style="
+                display: flex;
+                flex-direction: column-reverse;
+                width: 30px;
+                height: {height}px;
+                background-color: #f0f2f6;
+                border-radius: 4px; 
+                border: 1px solid #e1e4e8;
+                margin: 0 auto;">
+                <div style="height: {filled_pixels}px; background-color: #ff4b4b; border-radius: 0 0 4px 4px;"></div>
+            </div>
+            """
+            st.markdown(bar_html, unsafe_allow_html=True)
+
+        def render_data():
+            # Single values
+            a_weighted_metric.metric("A-Weighted", f"{st.session_state.audio_device_manager.latest_a_weighted_spl_db:.1f} dB")
+            spl_metric.metric("SPL", f"{st.session_state.audio_device_manager.latest_spl_db:.1f} dB")
+            rms_metric.metric("RMS", f"{st.session_state.audio_device_manager.latest_rms:.1f}")
+            peak_metric.metric("Peak", f"{st.session_state.audio_device_manager.latest_peak:.1f}")
+            fast_state_metric.metric("Fast", f"{st.session_state.audio_device_manager.latest_fast_state:.1f}")
+            slow_state_metric.metric("Slow", f"{st.session_state.audio_device_manager.latest_slow_state:.1f}")
+
+            # Don't display filterbands if not yet calculated
+            if len(st.session_state.audio_device_manager.latest_filterband_spl_db) != len(filterband_metrics):
+                return
+
+            # Filterband visualization            
+            for i, (band, freq) in enumerate(zip(filterband_metrics, list(helpers.frequency_weights_octave.keys()))):
+                spl_value = st.session_state.audio_device_manager.latest_filterband_spl_db[i]
+                normalized_spl = (spl_value + 100.0) / 200.0
+                clipped_value = np.clip(normalized_spl, 0, 1)
+
+                with band.container():
+                    render_vertical_bar(float(clipped_value), height=int(150))
+                    st.write(f"{spl_value:.1f}")
+                    st.write("dB")
+                    st.write(f"{int(freq)}")
+                    st.write("Hz")
+
+        render_data()
 
         while st.session_state.audio_device_manager.is_recording:
-            render_metrics()
-            time.sleep(0.2)
+            render_data()
+            time.sleep(0.05)
 
     def start_recording_thread(self):
         if st.session_state.recording_thread is None or not st.session_state.recording_thread.is_alive():
@@ -95,8 +145,10 @@ class UIHandler:
 
     def stop_recording_thread(self):
         st.session_state.measurement_status = "Stopped"
+
         if st.session_state.recording_thread is not None and st.session_state.recording_thread.is_alive():
             st.session_state.audio_device_manager.stop_recording()
             st.session_state.recording_thread.join(timeout=2)
+
             if st.session_state.recording_thread.is_alive():
                 print("Warning: recording thread did not exit within timeout.")
