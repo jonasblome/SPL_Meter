@@ -35,6 +35,14 @@ class UIHandler:
         if "measurement_status" not in st.session_state:
             st.session_state.measurement_status = "Stopped"
 
+        # Add toggle to store audio
+        if st.toggle("Store Audio", True):
+            st.write("Storing audio to file!")
+            st.session_state.audio_device_manager.should_store_audio = True
+        else:
+            st.write("Disabled audio file recording!")
+            st.session_state.audio_device_manager.should_store_audio = False
+
         # Add start/stop measurement buttons
         col1, col2 = st.columns(2)
 
