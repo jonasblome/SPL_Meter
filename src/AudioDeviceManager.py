@@ -76,7 +76,7 @@ class AudioDeviceManager:
         self.latest_time_weighted_value = float(latest_time_weighted_value)
 
         # Output raw data
-        # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
+        print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
         
         return (in_data, pyaudio.paContinue)
         
