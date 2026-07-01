@@ -4,8 +4,13 @@ Audio Input Module for ICS43434 Microphone
 Simple I2S microphone reader for Raspberry Pi Zero W
 """
 
+import os
 import time
 import numpy as np
+
+os.environ.setdefault("JACK_NO_AUDIO_RESERVATION", "1")
+os.environ.setdefault("JACK_NO_START_SERVER", "1")
+
 try:
     import pyaudio
 except ImportError:
