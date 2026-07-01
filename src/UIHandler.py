@@ -154,11 +154,12 @@ class UIHandler:
 
     def _stop_recording_thread(self):
         self.audio_device_manager.stop_recording()
-        if self.recording_thread is not None:
-            self.recording_thread.join(timeout=2)
-            if self.recording_thread.is_alive():
+        thread = self.recording_thread
+        self.recording_thread = None
+        if thread is not None:
+            thread.join(timeout=2)
+            if thread.is_alive():
                 print("Warning: recording thread did not exit within timeout.")
-            self.recording_thread = None
 
     def run(self):
         print(f"UIHandler: Starting Flask server on http://{self.host}:{self.port}")
