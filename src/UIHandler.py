@@ -25,9 +25,6 @@ class UIHandler:
         st.title("🎙️ SPL Meter Web UI")
         st.write("Simple web interface for the Raspberry Pi SPL Meter.")
 
-        if "audio_device_manager" not in st.session_state:
-            st.session_state.audio_device_manager = self.audio_device_manager
-
         if "recording_thread" not in st.session_state:
             st.session_state.recording_thread = None
 
@@ -66,25 +63,18 @@ class UIHandler:
 
         st.divider()
 
-        # Add metrics display placeholders
+        # Add metrics display
         metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 
-        spl_metric = metric_col1.empty()
-        rms_metric = metric_col2.empty()
-        peak_metric = metric_col3.empty()
-        time_weighted_metric = metric_col4.empty()
+        metric_col1.metric("SPL", f"{self.audio_device_manager.latest_spl_db:.2f} dB")
+        metric_col2.metric("RMS", f"{self.audio_device_manager.latest_rms:.6f}")
+        metric_col3.metric("Peak", f"{self.audio_device_manager.latest_peak:.6f}")
+        metric_col4.metric("Time Weighted", f"{self.audio_device_manager.latest_time_weighted_value:.6f}")
 
-        def render_metrics():
-            spl_metric.metric("SPL", f"{st.session_state.audio_device_manager.latest_spl_db:.2f} dB")
-            rms_metric.metric("RMS", f"{st.session_state.audio_device_manager.latest_rms:.2f}")
-            peak_metric.metric("Peak", f"{st.session_state.audio_device_manager.latest_peak:.2f}")
-            time_weighted_metric.metric("Time Weighted", f"{st.session_state.audio_device_manager.latest_time_weighted_value:.2f}")
-
-        render_metrics()
-
-        while st.session_state.audio_device_manager.is_recording:
-            render_metrics()
+        # Trigger periodic rerun while recording is active
+        if self.audio_device_manager.is_recording:
             time.sleep(0.2)
+            st.rerun()
 
     def start_recording_thread(self):
         if st.session_state.recording_thread is None or not st.session_state.recording_thread.is_alive():
