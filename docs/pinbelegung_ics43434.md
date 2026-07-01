@@ -64,7 +64,7 @@ GND         →    Pin 6  (GND)
 
 ## I2S-Aktivierung auf Raspberry Pi
 
-Füge folgende Zeilen zur `/boot/config.txt` hinzu:
+Füge folgende Zeilen zur `/boot/firmware/config.txt` hinzu:
 ```
 dtparam=i2s=on
 dtoverlay=googlevoicehat-soundcard
