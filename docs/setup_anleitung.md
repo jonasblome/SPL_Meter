@@ -17,10 +17,10 @@ Diese Anleitung beschreibt die vollständige Einrichtung des SPL Meter Projekts 
 ```
 ICS43434     →    Raspberry Pi Zero W
 ----------         ------------------
-Sel         →    Pin 38 (GPIO20)
-Lrcl        →    Pin 40 (GPIO21)
-BCLK        →    Pin 12 (GPIO18)  
-Dout        →    Pin 35 (GPIO19)
+Sel         →    Pin 9  (GND)       ← Linker Kanal
+Lrcl        →    Pin 35 (GPIO19)
+BCLK        →    Pin 12 (GPIO18)
+Dout        →    Pin 38 (GPIO20)
 GND         →    Pin 6  (GND)
 3V          →    Pin 1  (3.3V)
 ```
@@ -34,15 +34,15 @@ GND         →    Pin 6  (GND)
 
 ### 1. I2S-Schnittstelle aktivieren
 
-Füge folgende Zeilen zur `/boot/config.txt` hinzu:
+Füge folgende Zeilen zur `/boot/firmware/config.txt` hinzu:
 ```
 dtparam=i2s=on
-dtoverlay=i2s-mmap
+dtoverlay=googlevoicehat-soundcard
 ```
 
 **Schritte:**
 ```bash
-sudo nano /boot/config.txt
+sudo nano /boot/firmware/config.txt
 # Zeilen am Ende hinzufügen
 # Strg+X, Y, Enter zum Speichern
 sudo reboot

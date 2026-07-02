@@ -4,8 +4,13 @@ Audio Input Module for ICS43434 Microphone
 Simple I2S microphone reader for Raspberry Pi Zero W
 """
 
+import os
 import time
 import numpy as np
+
+os.environ.setdefault("JACK_NO_AUDIO_RESERVATION", "1")
+os.environ.setdefault("JACK_NO_START_SERVER", "1")
+
 try:
     import pyaudio
 except ImportError:
@@ -49,6 +54,8 @@ class AudioDeviceManager:
         self.latest_peak = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
+        self.latest_time_weighted_value = 0.0
+        self.time_weighting = "Fast"
 
         # File recording
         self.storing_format = pyaudio.paFloat32
@@ -64,27 +71,31 @@ class AudioDeviceManager:
         raw_audio_data = np.frombuffer(in_data, dtype=np.int32)
         
         # ICS43434 is 24-bit MSB-justified in 32-bit words, shift right by 8
-        raw_audio_data = raw_audio_data >> 8
+        audio_data = audio_data >> 8
         
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
-        audio_float = raw_audio_data.astype(np.float32) / 8388608.0
-
-        # Store audio to file
-        if self.should_store_recording:
-            self.store_recording(audio_float)
+        audio_float = audio_data.astype(np.float32) / 8388608.0
         
-        # Filter audio into frequency bands
-        filtered_audio = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
+        # Compute audio metrics
+        rms = self.audio_processor.compute_rms(audio_float)
+        spl_db = self.audio_processor.compute_spl_db(audio_float)
+        peak = self.audio_processor.compute_peak(audio_float)
 
-        # Compute loudness metrics
-        self.latest_filterband_spl_db = [self.audio_processor.compute_spl_db(filtered_audio[i]) for i in range(len(filtered_audio))]
-        self.latest_a_weighted_spl_db = self.audio_processor.compute_a_weighting(filtered_audio, is_octave=True)
-        self.latest_rms = self.audio_processor.compute_rms(audio_float)
-        self.latest_spl_db = self.audio_processor.compute_spl_db(audio_float)
-        self.latest_peak = self.audio_processor.compute_peak(audio_float)
-        self.latest_fast_state = self.audio_processor.compute_fast_state(audio_float)
-        self.latest_slow_state = self.audio_processor.compute_slow_state(audio_float)
+        # Time weighting
+        if self.time_weighting == "Fast":
+            latest_time_weighted_value = self.audio_processor.compute_fast_state(audio_float)
+        else:
+            latest_time_weighted_value = self.audio_processor.compute_slow_state(audio_float)
 
+        #Save the data
+        self.latest_rms = float(rms)
+        self.latest_spl_db = float(spl_db)
+        self.latest_peak = float(peak)
+        self.latest_time_weighted_value = float(latest_time_weighted_value)
+
+        # Output raw data
+        # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
+        
         return (in_data, pyaudio.paContinue)
         
     def start_recording(self):

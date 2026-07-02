@@ -8,9 +8,9 @@ Das ICS43434 ist ein digitaler I2S-Mikrofon, der über die I2S-Schnittstelle mit
 | ICS43434 Pin | Raspberry Pi Zero W Pin | Funktion |
 |--------------|------------------------|----------|
 | Sel          | GND (Pin 9)            | Channel Select (links = GND, rechts = 3.3V) |
-| Lrcl         | GPIO 21 (Pin 40)       | Left/Right Clock (WS) |
+| Lrcl         | GPIO 19 (Pin 35)       | Left/Right Clock (WS) |
 | BCLK         | GPIO 18 (Pin 12)       | Bit Clock (SCK) |
-| Dout         | GPIO 19 (Pin 35)       | Serial Data (SD) |
+| Dout         | GPIO 20 (Pin 38)       | Serial Data (SD) |
 | GND          | GND (Pin 6, 9, 14, 20, 25, 30, 34, 39) | Ground |
 | 3V           | 3.3V (Pin 1, 17)      | Stromversorgung |
 
@@ -48,9 +48,9 @@ Das ICS43434 ist ein digitaler I2S-Mikrofon, der über die I2S-Schnittstelle mit
 ICS43434     →    Raspberry Pi Zero W
 ----------         ------------------
 Sel         →    Pin 9  (GND)       ← Linker Kanal
-Lrcl        →    Pin 40 (GPIO21)
-BCLK        →    Pin 12 (GPIO18)  
-Dout        →    Pin 35 (GPIO19)
+Lrcl        →    Pin 35 (GPIO19)
+BCLK        →    Pin 12 (GPIO18)
+Dout        →    Pin 38 (GPIO20)
 GND         →    Pin 6  (GND)
 3V          →    Pin 1  (3.3V)
 ```
@@ -64,7 +64,7 @@ GND         →    Pin 6  (GND)
 
 ## I2S-Aktivierung auf Raspberry Pi
 
-Füge folgende Zeilen zur `/boot/config.txt` hinzu:
+Füge folgende Zeilen zur `/boot/firmware/config.txt` hinzu:
 ```
 dtparam=i2s=on
 dtoverlay=googlevoicehat-soundcard
