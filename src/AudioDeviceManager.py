@@ -71,7 +71,7 @@ class AudioDeviceManager:
         raw_audio_data = np.frombuffer(in_data, dtype=np.int32)
         
         # ICS43434 is 24-bit MSB-justified in 32-bit words, shift right by 8
-        audio_data = audio_data >> 8
+        audio_data = raw_audio_data >> 8
         
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
