@@ -47,7 +47,9 @@ class AudioDeviceManager:
 
         # Audio processing
         self.audio_processor = audio_processor
-        self.latest_filterband_spl_db = [0.0] * 8
+        # Prepare filterbank in advance to only calculate once
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
+        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_spl_db = 0.0
@@ -61,9 +63,6 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
-
-        # Prepare filterbank in advance to only calculate once
-        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -81,11 +80,23 @@ class AudioDeviceManager:
         spl_db = self.audio_processor.compute_spl_db(audio_float)
         peak = self.audio_processor.compute_peak(audio_float)
 
+        # Compute filterband levels and A-weighting
+        filtered_signals = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
+        self.latest_filterband_spl_db = [
+            float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
+            for signal in filtered_signals
+        ]
+        self.latest_a_weighted_spl_db = float(
+            max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals))
+        )
+
         # Time weighting
+        self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
+        self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
         if self.time_weighting == "Fast":
-            latest_time_weighted_value = self.audio_processor.compute_fast_state(audio_float)
+            latest_time_weighted_value = self.latest_fast_state
         else:
-            latest_time_weighted_value = self.audio_processor.compute_slow_state(audio_float)
+            latest_time_weighted_value = self.latest_slow_state
 
         #Save the data
         self.latest_rms = float(rms)
