@@ -52,6 +52,9 @@ class AudioDeviceManager:
         # Convert byte data to numpy array (32-bit PCM, googlevoicehat I2S driver)
         audio_data = np.frombuffer(in_data, dtype=np.int32)
         
+        # Microphone is mono on left channel of stereo bus (SEL=GND)
+        audio_data = audio_data[::self.num_channels]
+        
         # Normalize to float [-1.0, 1.0] (32-bit range = 2^31)
         audio_float = audio_data.astype(np.float32) / 2147483648.0
         
