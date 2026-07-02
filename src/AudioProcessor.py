@@ -60,6 +60,64 @@ class AudioProcessor:
     def __init__(self):
         print("AudioProcessor: Initializing")
 
+        # variables for Leq computation
+        self.leq_sum_square = 0.0
+        self.leq_sample_count = 0
+        self.leq_target_sample_count = 0
+
+        self.leq_duration_seconds = None
+        self.leq_sample_rate = None
+
+        self.leq_is_running = False
+        self.leq_result_db = None
+
+    def reset_leq_measurement(self):
+        self.leq_sum_square = 0.0
+        self.leq_sample_count = 0
+        self.leq_target_sample_count = 0
+
+        self.leq_duration_seconds = None
+        self.leq_sample_rate = None
+
+        self.leq_is_running = False
+        self.leq_result_db = None
+    def start_leq_measurement(self, duration_seconds, sample_rate):
+        if duration_seconds <= 0:
+            raise ValueError("duration_seconds must be greater than zero")
+    
+        self.reset_leq_measurement()
+
+        self.leq_duration_seconds = duration_seconds
+        self.leq_sample_rate = sample_rate
+        self.leq_target_sample_count = int(duration_seconds * sample_rate)
+
+        self.leq_is_running = True
+        self.leq_result_db = None
+
+    def process_leq_measurement(self, audio_data, reference_pressure=20e-6):
+        if not self.leq_is_running:
+            raise RuntimeError("Leq measurement has not been started.")
+
+        remaining_samples = self.leq_target_sample_count - self.leq_sample_count
+
+        audio_data = audio_data[:remaining_samples]
+
+        self.leq_sum_square += np.sum(audio_data**2)
+        self.leq_sample_count += len(audio_data)
+
+        if self.leq_sample_count < self.leq_target_sample_count:
+            return None, False
+
+        self.leq_is_running = False
+
+        if self.leq_sample_count == 0 or self.leq_sum_square == 0:
+            self.leq_result_db = -np.inf
+        else:
+            mean_square = self.leq_sum_square / self.leq_sample_count
+            self.leq_result_db = 10 * np.log10(mean_square / reference_pressure**2)
+
+        return self.leq_result_db, True
+
     def compute_rms(self, audio_data):
         return np.sqrt(np.mean(audio_data**2))
     
