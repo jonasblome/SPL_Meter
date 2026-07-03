@@ -150,7 +150,7 @@ class UIHandler:
         return HTML_PAGE_HEAD + boxes + HTML_PAGE_TAIL
 
     def _register_routes(self):
-        adm = self.audio_device_manager
+        device_manager = self.audio_device_manager
 
         @self.app.route("/")
         def index():
@@ -169,24 +169,24 @@ class UIHandler:
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
             data = request.get_json()
-            adm.should_store_recording = bool(data.get("store", False))
-            return jsonify({"store": adm.should_store_recording})
+            device_manager.should_store_recording = bool(data.get("store", False))
+            return jsonify({"store": device_manager.should_store_recording})
 
         @self.app.route("/stream")
         def stream():
             def event_generator():
-                while adm.is_recording:
+                while device_manager.is_recording:
                     payload = json.dumps({
-                        "a_weighted":    adm.latest_a_weighted_spl_db,
-                        "spl_db":        adm.latest_spl_db,
-                        "rms":           adm.latest_rms,
-                        "peak":          adm.latest_peak,
-                        "fast":          adm.latest_fast_state,
-                        "slow":          adm.latest_slow_state,
-                        "filterband_spl_db": adm.latest_filterband_spl_db,
+                        "spl_db":        device_manager.latest_spl_db,
+                        "rms":           device_manager.latest_rms,
+                        "peak":          device_manager.latest_peak,
+                        "a_weighted":    device_manager.latest_a_weighted_spl_db,
+                        "fast":          device_manager.latest_fast_state,
+                        "slow":          device_manager.latest_slow_state,
+                        "filterband_spl_db": device_manager.latest_filterband_spl_db,
                     })
                     yield f"data: {payload}\n\n"
-                    time.sleep(0.2)
+                    time.sleep(0.05)  # 20 Hz update rate
             return Response(event_generator(), mimetype="text/event-stream")
 
     def _start_recording_thread(self):
