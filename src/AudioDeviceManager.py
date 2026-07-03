@@ -53,6 +53,11 @@ class AudioDeviceManager:
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
+        self.latest_rms = 0.0
+        self.latest_spl_db = 0.0
+        self.latest_raw_spl_db = 0.0
+        self.calibration_offset_db = 0.0
+        self.latest_peak = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
 
@@ -98,7 +103,17 @@ class AudioDeviceManager:
         #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
         
         return (in_data, pyaudio.paContinue)
-        
+    #calibration
+    def calibrate_microphone(self, reference_db):
+        """Calculate calibration offset from the current detected SPL."""
+        self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db
+
+        return {
+            "reference_db": float(reference_db),
+            "measured_db": self.latest_raw_spl_db,
+            "offset_db": self.calibration_offset_db,
+        }
+
     def start_recording(self):
         """Start recording from the microphone"""
         try:
