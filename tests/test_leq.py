@@ -10,6 +10,12 @@ import UIHandler
 
 
 def process_audio_in_blocks(processor, audio_data, block_size=1024):
+    """
+    Simulate real audio processing.
+
+    The SPL meter will receive audio in small blocks, not as one large array.
+    This helper feeds the test signal block by block into the Leq processor.
+    """
     is_complete = False
     leq_db = None
 
