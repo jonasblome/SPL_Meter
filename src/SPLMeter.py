@@ -1,5 +1,5 @@
 import AudioDeviceManager
-import AudioSimulator
+import AudioDeviceSimulator
 import UIHandler
 import AudioProcessor
 
@@ -10,7 +10,7 @@ class SPLMeter:
         self.audioProcessor = AudioProcessor.AudioProcessor()
 
         if simulate and wav_path:
-            self.audioDeviceManager = AudioSimulator.AudioSimulator(
+            self.audioDeviceManager = AudioDeviceSimulator.AudioDeviceSimulator(
                 wav_path=wav_path,
                 chunk_size=1024,
                 audio_processor=self.audioProcessor
@@ -19,9 +19,10 @@ class SPLMeter:
             self.audioDeviceManager = AudioDeviceManager.AudioDeviceManager(
                 sample_rate=48000,
                 chunk_size=1024,
-                device_index=0,
+                device_index=0, # set to 0 for Pi microphone, adjust as needed
                 audio_processor=self.audioProcessor
             )
+        self.audioDeviceManager.list_devices()
 
         self.uiHandler = UIHandler.UIHandler(self.audioDeviceManager)
 

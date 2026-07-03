@@ -19,8 +19,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         #btn-start { background: #4CAF50; color: white; }
         #btn-stop  { background: #f44336; color: white; }
         #btn-start:disabled, #btn-stop:disabled { opacity: 0.4; cursor: default; }
-        .weighting { display: flex; gap: 16px; align-items: center; margin: 12px 0; }
-        .weighting label { font-size: 16px; cursor: pointer; }
         .store-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 16px; cursor: pointer; }
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
@@ -48,12 +46,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <button id="btn-stop"  onclick="stopMeasurement()" disabled>Stop Measurement</button>
     </div>
     <hr>
-    <div class="weighting">
-        <strong>Time Weighting:</strong>
-        <label><input type="radio" name="weighting" value="Fast" checked onchange="setWeighting(this.value)"> Fast</label>
-        <label><input type="radio" name="weighting" value="Slow" onchange="setWeighting(this.value)"> Slow</label>
-    </div>
-    <hr>
     <label class="store-toggle">
         <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
         Store Audio
@@ -68,7 +60,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <div class="metric-box"><div class="metric-label">Peak</div><div class="metric-value" id="peak">--</div></div>
         <div class="metric-box"><div class="metric-label">Fast</div><div class="metric-value" id="fast">--</div></div>
         <div class="metric-box"><div class="metric-label">Slow</div><div class="metric-value" id="slow">--</div></div>
-        <div class="metric-box"><div class="metric-label">Time Weighted</div><div class="metric-value" id="tw">--</div></div>
     </div>
     <hr>
     <div class="filterband-section">
@@ -104,10 +95,6 @@ HTML_PAGE_TAIL = """
             });
         }
 
-        function setWeighting(value) {
-            fetch('/weighting', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({weighting: value})});
-        }
-
         function setStoreAudio(checked) {
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
         }
@@ -119,11 +106,10 @@ HTML_PAGE_TAIL = """
                 const d = JSON.parse(e.data);
                 document.getElementById('a-weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
-                document.getElementById('rms').textContent  = d.rms.toFixed(6);
-                document.getElementById('peak').textContent = d.peak.toFixed(6);
-                document.getElementById('fast').textContent = d.fast.toFixed(6);
-                document.getElementById('slow').textContent = d.slow.toFixed(6);
-                document.getElementById('tw').textContent   = d.time_weighted.toFixed(6);
+                document.getElementById('rms').textContent  = d.rms.toFixed(2);
+                document.getElementById('peak').textContent = d.peak.toFixed(2);
+                document.getElementById('fast').textContent = d.fast.toFixed(2);
+                document.getElementById('slow').textContent = d.slow.toFixed(2);
                 if (d.filterband_spl_db) {
                     d.filterband_spl_db.forEach((spl, i) => {
                         const normalized = Math.max(0.0, Math.min(1.0, (spl + 100.0) / 200.0));
@@ -164,7 +150,7 @@ class UIHandler:
         return HTML_PAGE_HEAD + boxes + HTML_PAGE_TAIL
 
     def _register_routes(self):
-        adm = self.audio_device_manager
+        device_manager = self.audio_device_manager
 
         @self.app.route("/")
         def index():
@@ -180,34 +166,27 @@ class UIHandler:
             self._stop_recording_thread()
             return jsonify({"status": "stopped"})
 
-        @self.app.route("/weighting", methods=["POST"])
-        def weighting():
-            data = request.get_json()
-            adm.time_weighting = data.get("weighting", "Fast")
-            return jsonify({"weighting": adm.time_weighting})
-
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
             data = request.get_json()
-            adm.should_store_recording = bool(data.get("store", False))
-            return jsonify({"store": adm.should_store_recording})
+            device_manager.should_store_recording = bool(data.get("store", False))
+            return jsonify({"store": device_manager.should_store_recording})
 
         @self.app.route("/stream")
         def stream():
             def event_generator():
-                while adm.is_recording:
+                while device_manager.is_recording:
                     payload = json.dumps({
-                        "a_weighted":    adm.latest_a_weighted_spl_db,
-                        "spl_db":        adm.latest_spl_db,
-                        "rms":           adm.latest_rms,
-                        "peak":          adm.latest_peak,
-                        "fast":          adm.latest_fast_state,
-                        "slow":          adm.latest_slow_state,
-                        "time_weighted": adm.latest_time_weighted_value,
-                        "filterband_spl_db": adm.latest_filterband_spl_db,
+                        "spl_db":        device_manager.latest_spl_db,
+                        "rms":           device_manager.latest_rms,
+                        "peak":          device_manager.latest_peak,
+                        "a_weighted":    device_manager.latest_a_weighted_spl_db,
+                        "fast":          device_manager.latest_fast_state,
+                        "slow":          device_manager.latest_slow_state,
+                        "filterband_spl_db": device_manager.latest_filterband_spl_db,
                     })
                     yield f"data: {payload}\n\n"
-                    time.sleep(0.2)
+                    time.sleep(0.05)  # 20 Hz update rate
             return Response(event_generator(), mimetype="text/event-stream")
 
     def _start_recording_thread(self):
