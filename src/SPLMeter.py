@@ -1,5 +1,5 @@
 import AudioDeviceManager
-import AudioSimulator
+import AudioDeviceSimulator
 import UIHandler
 import AudioProcessor
 
@@ -10,7 +10,7 @@ class SPLMeter:
         self.audioProcessor = AudioProcessor.AudioProcessor()
 
         if simulate and wav_path:
-            self.audioDeviceManager = AudioSimulator.AudioSimulator(
+            self.audioDeviceManager = AudioDeviceSimulator.AudioDeviceSimulator(
                 wav_path=wav_path,
                 chunk_size=1024,
                 audio_processor=self.audioProcessor

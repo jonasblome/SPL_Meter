@@ -56,8 +56,6 @@ class AudioDeviceManager:
         self.latest_peak = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
-        self.latest_time_weighted_value = 0.0
-        self.time_weighting = "Fast"
 
         # File recording
         self.storing_format = pyaudio.paFloat32
@@ -76,9 +74,9 @@ class AudioDeviceManager:
         audio_float = audio_data.astype(np.float32) / 8388608.0
         
         # Compute audio metrics
-        rms = self.audio_processor.compute_rms(audio_float)
-        spl_db = self.audio_processor.compute_spl_db(audio_float)
-        peak = self.audio_processor.compute_peak(audio_float)
+        self.latest_rms = self.audio_processor.compute_rms(audio_float)
+        self.latest_spl_db = self.audio_processor.compute_spl_db(audio_float)
+        self.latest_peak = self.audio_processor.compute_peak(audio_float)
 
         # Compute filterband levels and A-weighting
         filtered_signals = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
@@ -86,26 +84,15 @@ class AudioDeviceManager:
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
         ]
-        self.latest_a_weighted_spl_db = float(
-            max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals))
-        )
+        self.latest_a_weighted_spl_db = max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals))
 
         # Time weighting
-        self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
-        self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
-        if self.time_weighting == "Fast":
-            latest_time_weighted_value = self.latest_fast_state
-        else:
-            latest_time_weighted_value = self.latest_slow_state
-
-        #Save the data
-        self.latest_rms = float(rms)
-        self.latest_spl_db = float(spl_db)
-        self.latest_peak = float(peak)
-        self.latest_time_weighted_value = float(latest_time_weighted_value)
+        self.latest_fast_state = self.audio_processor.compute_fast_state(audio_float)
+        self.latest_slow_state = self.audio_processor.compute_slow_state(audio_float)
 
         # Output raw data
-        # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
+        # print(f"RMS: {self.latest_rms:.2f}, SPL: {self.latest_spl_db:.2f} dB,"
+        #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
         
         return (in_data, pyaudio.paContinue)
         

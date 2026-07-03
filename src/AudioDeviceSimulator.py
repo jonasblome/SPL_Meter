@@ -9,22 +9,26 @@ import wave
 import numpy as np
 
 
-class AudioSimulator:
+class AudioDeviceSimulator:
     """Simulates AudioDeviceManager using a WAV file as audio source"""
 
     def __init__(self, wav_path, chunk_size=1024, audio_processor=None):
-        print("AudioSimulator: Initializing")
+        print("AudioDeviceSimulator: Initializing")
         self.wav_path = wav_path
         self.chunk_size = chunk_size
-        self.audio_processor = audio_processor
-
         self.is_recording = False
-        self.time_weighting = "Fast"
 
+        # Audio processing
+        self.audio_processor = audio_processor
+        # Prepare filterbank in advance to only calculate once
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
+        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
+        self.latest_a_weighted_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_spl_db = 0.0
         self.latest_peak = 0.0
-        self.latest_time_weighted_value = 0.0
+        self.latest_fast_state = 0.0
+        self.latest_slow_state = 0.0
 
         with wave.open(self.wav_path, "rb") as wf:
             self.sample_rate = wf.getframerate()
@@ -89,19 +93,22 @@ class AudioSimulator:
 
     def _process_chunk(self, audio_float):
         """Process one chunk — same logic as AudioDeviceManager._audio_callback"""
-        rms = self.audio_processor.compute_rms(audio_float)
-        spl_db = self.audio_processor.compute_spl_db(audio_float)
-        peak = self.audio_processor.compute_peak(audio_float)
+        self.latest_rms = self.audio_processor.compute_rms(audio_float)
+        self.latest_spl_db = self.audio_processor.compute_spl_db(audio_float)
+        self.latest_peak = self.audio_processor.compute_peak(audio_float)
 
-        if self.time_weighting == "Fast":
-            tw = self.audio_processor.compute_fast_state(audio_float)
-        else:
-            tw = self.audio_processor.compute_slow_state(audio_float)
+        # Compute filterband levels and A-weighting
+        filtered_signals = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
+        self.latest_filterband_spl_db = [
+            float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
+            for signal in filtered_signals
+        ]
+        self.latest_a_weighted_spl_db = max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals))
 
-        self.latest_rms = float(rms)
-        self.latest_spl_db = float(spl_db)
-        self.latest_peak = float(peak)
-        self.latest_time_weighted_value = float(tw)
+        # Time weighting
+        self.latest_fast_state = self.audio_processor.compute_fast_state(audio_float)
+        self.latest_slow_state = self.audio_processor.compute_slow_state(audio_float)
 
-        print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, "
-              f"Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
+        # Output raw data
+        # print(f"RMS: {self.latest_rms:.2f}, SPL: {self.latest_spl_db:.2f} dB, "
+        #       f"Peak: {self.latest_peak:.2}, Time Weighted: {self.latest_a_weighted_spl_db:.2f}")

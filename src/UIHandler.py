@@ -106,10 +106,10 @@ HTML_PAGE_TAIL = """
                 const d = JSON.parse(e.data);
                 document.getElementById('a-weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
-                document.getElementById('rms').textContent  = d.rms.toFixed(6);
-                document.getElementById('peak').textContent = d.peak.toFixed(6);
-                document.getElementById('fast').textContent = d.fast.toFixed(6);
-                document.getElementById('slow').textContent = d.slow.toFixed(6);
+                document.getElementById('rms').textContent  = d.rms.toFixed(2);
+                document.getElementById('peak').textContent = d.peak.toFixed(2);
+                document.getElementById('fast').textContent = d.fast.toFixed(2);
+                document.getElementById('slow').textContent = d.slow.toFixed(2);
                 if (d.filterband_spl_db) {
                     d.filterband_spl_db.forEach((spl, i) => {
                         const normalized = Math.max(0.0, Math.min(1.0, (spl + 100.0) / 200.0));
