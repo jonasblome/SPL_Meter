@@ -53,6 +53,8 @@ class AudioDeviceManager:
         self.latest_a_weighted_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_spl_db = 0.0
+        self.latest_raw_spl_db = 0.0
+        self.calibration_offset_db = 0.0
         self.latest_peak = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
@@ -77,7 +79,8 @@ class AudioDeviceManager:
         
         # Compute audio metrics
         rms = self.audio_processor.compute_rms(audio_float)
-        spl_db = self.audio_processor.compute_spl_db(audio_float)
+        raw_spl_db = self.audio_processor.detect_level_db(audio_float)
+        spl_db = raw_spl_db + self.calibration_offset_db
         peak = self.audio_processor.compute_peak(audio_float)
 
         # Compute filterband levels and A-weighting
@@ -100,6 +103,7 @@ class AudioDeviceManager:
 
         #Save the data
         self.latest_rms = float(rms)
+        self.latest_raw_spl_db = float(raw_spl_db)
         self.latest_spl_db = float(spl_db)
         self.latest_peak = float(peak)
         self.latest_time_weighted_value = float(latest_time_weighted_value)
@@ -108,7 +112,17 @@ class AudioDeviceManager:
         # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
         
         return (in_data, pyaudio.paContinue)
-        
+    #calibration
+    def calibrate_microphone(self, reference_db):
+        """Calculate calibration offset from the current detected SPL."""
+        self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db
+
+        return {
+            "reference_db": float(reference_db),
+            "measured_db": self.latest_raw_spl_db,
+            "offset_db": self.calibration_offset_db,
+        }
+
     def start_recording(self):
         """Start recording from the microphone"""
         try:

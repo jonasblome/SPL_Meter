@@ -32,7 +32,14 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         .filterband-section { margin-top: 24px; }
         .filterband-grid { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
         .filterband-box { display: flex; flex-direction: column; align-items: center; width: 60px; }
-        .filterband-value { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+        .filterband-value {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            text-align: center;
+            line-height: 1.2;
+        }
         .filterband-bar-container { display: flex; flex-direction: column-reverse; width: 30px; height: 150px; background: #f0f2f6; border-radius: 4px; border: 1px solid #e1e4e8; }
         .filterband-bar-fill { background: #ff4b4b; border-radius: 0 0 4px 4px; width: 100%; transition: height 0.2s; }
         .filterband-freq { font-size: 12px; color: #666; margin-top: 4px; }
@@ -58,6 +65,14 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
         Store Audio
     </label>
+
+    <div class="weighting">
+        <strong>Calibration:</strong>
+        <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
+        <span>dB</span>
+        <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
+        <span id="calibration-status">Not calibrated</span>
+    </div>
     <hr>
     <div class="status stopped" id="status">Status: Stopped</div>
     <hr>
@@ -107,7 +122,22 @@ HTML_PAGE_TAIL = """
         function setWeighting(value) {
             fetch('/weighting', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({weighting: value})});
         }
+        function calibrateMicrophone() {
+            const referenceDb = Number(
+                document.getElementById('reference-db').value
+            );
 
+            fetch('/calibrate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reference_db: referenceDb})
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('calibration-status').textContent =
+                    'Offset: ' + data.offset_db.toFixed(2) + ' dB';
+            });
+        }
         function setStoreAudio(checked) {
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
         }
@@ -130,7 +160,7 @@ HTML_PAGE_TAIL = """
                         const fill = document.getElementById('band-' + i + '-fill');
                         const value = document.getElementById('band-' + i + '-value');
                         if (fill) fill.style.height = (normalized * 100).toFixed(1) + '%';
-                        if (value) value.textContent = spl.toFixed(1) + ' dB';
+                        if (value) value.textContent = spl.toFixed(1) + '\u00A0dB';
                     });
                 }
             };
@@ -185,7 +215,18 @@ class UIHandler:
             data = request.get_json()
             adm.time_weighting = data.get("weighting", "Fast")
             return jsonify({"weighting": adm.time_weighting})
+        @self.app.route("/calibrate", methods=["POST"])
+        def calibrate():
+            if not adm.is_recording:
+                return jsonify({
+                    "error": "Start measurement before calibration."
+                }), 400
 
+            data = request.get_json() or {}
+            reference_db = float(data.get("reference_db", 94.0))
+
+            result = adm.calibrate_microphone(reference_db)
+            return jsonify(result)
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
             data = request.get_json()
