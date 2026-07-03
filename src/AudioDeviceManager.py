@@ -16,11 +16,12 @@ except ImportError:
 class AudioDeviceManager:
     """Manages ICS43434 I2S microphone audio input and processing"""
     
-    def __init__(self, sample_rate=48000, chunk_size=1024, device_index=0, audio_processor=None):
+    def __init__(self, audio_processor, sample_rate=48000, chunk_size=1024, device_index=0):
         """
         Initialize the audio device manager
         
         Args:
+            audio_processor (AudioProcessor): The audio processor instance
             sample_rate (int): Audio sample rate in Hz
             chunk_size (int): Number of samples per chunk
             device_index (int): PyAudio device index to use
@@ -33,14 +34,20 @@ class AudioDeviceManager:
         self.is_recording = False
         self.audio = None
         self.stream = None
+
+        self.latest_filterband_spl_db = [0.0] * 8
+        self.latest_a_weighted_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_spl_db = 0.0
         self.latest_peak = 0.0
-        self.latest_time_weighted_value = 0.0
-        self.last_error = None
-        self.time_weighting = "Fast"
+        self.latest_fast_state = 0.0
+        self.latest_slow_state = 0.0
 
+        self.last_error = None
         self.audio_processor = audio_processor
+
+        # Prepare filterbank in advance to only calculate once
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -53,26 +60,18 @@ class AudioDeviceManager:
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
         
-        # Compute audio metrics
-        rms = self.audio_processor.compute_rms(audio_float)
-        spl_db = self.audio_processor.compute_spl_db(audio_float)
-        peak = self.audio_processor.compute_peak(audio_float)
+        # Filter audio into frequency bands
+        filtered_audio = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
 
-        # Time weighting
-        if self.time_weighting == "Fast":
-            latest_time_weighted_value = self.audio_processor.compute_fast_state(audio_float)
-        else:
-            latest_time_weighted_value = self.audio_processor.compute_slow_state(audio_float)
+        # Compute loudness metrics
+        self.latest_filterband_spl_db = [self.audio_processor.compute_spl_db(filtered_audio[i]) for i in range(len(filtered_audio))]
+        self.latest_a_weighted_spl_db = self.audio_processor.compute_a_weighting(filtered_audio, is_octave=True)
+        self.latest_rms = self.audio_processor.compute_rms(audio_float)
+        self.latest_spl_db = self.audio_processor.compute_spl_db(audio_float)
+        self.latest_peak = self.audio_processor.compute_peak(audio_float)
+        self.latest_fast_state = self.audio_processor.compute_fast_state(audio_float)
+        self.latest_slow_state = self.audio_processor.compute_slow_state(audio_float)
 
-        #Save the data
-        self.latest_rms = float(rms)
-        self.latest_spl_db = float(spl_db)
-        self.latest_peak = float(peak)
-        self.latest_time_weighted_value = float(latest_time_weighted_value)
-
-        # Output raw data
-        # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
-        
         return (in_data, pyaudio.paContinue)
         
     def start_recording(self):
