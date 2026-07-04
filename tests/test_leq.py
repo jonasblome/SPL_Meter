@@ -52,7 +52,7 @@ def test_leq_measurement_10_seconds_reference_pressure():
         sample_rate=sample_rate
     )
 
-    audio_data = np.ones(duration_seconds * sample_rate) * reference_pressure
+    audio_data = np.ones(int(duration_seconds * sample_rate)) * reference_pressure
 
     leq_db, is_complete = process_audio_in_blocks(processor, audio_data)
 
@@ -64,3 +64,26 @@ def test_leq_measurement_10_seconds_reference_pressure():
     assert processor.leq_sample_count == duration_seconds * sample_rate
     assert processor.leq_is_running is False
     assert np.isclose(leq_db, 0.0, atol=1e-9)
+
+def test_leq_measurement_10_times_reference_pressure():
+    processor = AudioProcessor.AudioProcessor()
+    ui_handler = UIHandler.UIHandler()
+
+    reference_pressure = 20e-6
+    sample_rate = 1000
+
+    duration_seconds = ui_handler.set_leq_duration_index(1)
+
+    processor.start_leq_measurement(
+        duration_seconds=duration_seconds,
+        sample_rate=sample_rate
+    )
+
+    audio_data = np.ones(int(duration_seconds * sample_rate)) * (10 * reference_pressure)
+
+    leq_db, is_complete = process_audio_in_blocks(processor, audio_data)
+
+    assert is_complete is True
+    assert processor.leq_sample_count == duration_seconds * sample_rate
+    assert processor.leq_is_running is False
+    assert np.isclose(leq_db, 20.0, atol=1e-9)

@@ -1,64 +1,14 @@
 import numpy as np
+import helpers
 from scipy import signal
 
 class AudioProcessor:
-    # According to IEC61672:2014
-    frequency_weights_3rd_octave = {
-        6.3: -85.4,
-        8: -77.8,
-        10: -70.4,
-        12.5: -63.4,
-        16: -56.7,
-        20: -50.5,
-        25: -44.7,
-        31.5: -39.4,
-        40: -34.6,
-        50: -30.2,
-        63: -26.2,
-        80: -22.5,
-        100: -19.1,
-        125: -16.1,
-        160: -13.4,
-        200: -10.9,
-        250: -8.6,
-        315: -6.6,
-        400: -4.8,
-        500: -3.2,
-        630: -1.9,
-        800: -0.8,
-        1000: 0.0,
-        1250: 0.6,
-        1600: 1.0,
-        2000: 1.2,
-        2500: 1.3,
-        3150: 1.2,
-        4000: 1.0,
-        5000: 0.5,
-        6300: -0.1,
-        8000: -1.1,
-        10000: -2.5,
-        12500: -4.3,
-        16000: -6.6,
-        20000: -9.3
-    }
-
-    frequency_weights_octave = {
-        8: -77.8,
-        16: -56.7,
-        31.5: -39.4,
-        63: -26.2,
-        125: -16.1,
-        250: -8.6,
-        500: -3.2,
-        1000: 0.0,
-        2000: 1.2,
-        4000: 1.0,
-        8000: -1.1,
-        16000: -6.6
-    }
-
-    def __init__(self):
+    def __init__(self, sample_rate=48000):
         print("AudioProcessor: Initializing")
+
+        self.sample_rate = sample_rate
+        self.fast_state = 0.0
+        self.slow_state = 0.0
 
         # State variables for a fixed-duration Leq measurement.
         # Leq is calculated over a defined measurement time, e.g. 10 seconds.
@@ -72,9 +22,12 @@ class AudioProcessor:
 
         self.leq_is_running = False
         self.leq_result_db = None
+    
+    def compute_peak(self, audio_data):
+        return np.max(np.abs(audio_data))
 
     def reset_leq_measurement(self):
-        # reset all internal values used for Leq measurement
+        # Reset all internal values used for Leq measurement.
         self.leq_sum_square = 0.0
         self.leq_sample_count = 0
         self.leq_target_sample_count = 0
@@ -84,6 +37,7 @@ class AudioProcessor:
 
         self.leq_is_running = False
         self.leq_result_db = None
+
     def start_leq_measurement(self, duration_seconds, sample_rate):
         """
         Start a new fixed-duration Leq measurement.
@@ -97,7 +51,7 @@ class AudioProcessor:
         if sample_rate <= 0:
             raise ValueError("sample_rate must be greater than zero")
 
-        # make sure no values from a previous Leq measurement are reused.
+        # Make sure no values from a previous Leq measurement are reused.
         self.reset_leq_measurement()
 
         self.leq_duration_seconds = duration_seconds
@@ -122,9 +76,8 @@ class AudioProcessor:
             raise RuntimeError("Leq measurement has not been started.")
         
         # Only process the number of samples that are still needed.
-        # This prevents the last block from exceeding the selected measurement time
+        # This prevents the last block from exceeding the selected measurement time.
         remaining_samples = self.leq_target_sample_count - self.leq_sample_count
-
         audio_data = audio_data[:remaining_samples]
 
         # Leq is an energetic average, so pressure values are squared before averaging.
@@ -161,9 +114,48 @@ class AudioProcessor:
         
         return spl_db
     
+    #Zeitbewertung in fast and slow
+    def compute_time_weighting_factor(self, tau):
+        return np.exp(-1.0 / (self.sample_rate * tau))
+    
+    def update_time_weighting_state(self, sample, old_state, tau):
+        a = self.compute_time_weighting_factor(tau)
+
+        current_squared_pressure = sample ** 2
+
+        new_state = a * old_state + (1 - a) * current_squared_pressure
+
+        return new_state
+    
+    def process_time_weighting_block(self, audio_data, old_state, tau):
+        state = old_state
+
+        for sample in audio_data:
+            state = self.update_time_weighting_state(sample, state, tau)
+
+        return state
+    
+    def compute_fast_state(self, audio_data):
+        self.fast_state = self.process_time_weighting_block(
+            audio_data,
+            self.fast_state,
+            tau=0.125
+        )
+
+        return self.fast_state
+
+    def compute_slow_state(self, audio_data):
+        self.slow_state = self.process_time_weighting_block(
+            audio_data,
+            self.slow_state,
+            tau=1.0
+        )
+
+        return self.slow_state
+    
     def design_a_weighting_filterbank(self, sample_rate, is_octave=True):
         octave_ratio = 10**(3/10) if is_octave else 10**(1/10)
-        frequency_weights = self.frequency_weights_octave if is_octave else self.frequency_weights_3rd_octave
+        frequency_weights = helpers.frequency_weights_octave if is_octave else helpers.frequency_weights_3rd_octave
         band_lower_freqs = np.array(list(frequency_weights.keys())) * octave_ratio**(-1/2)
         band_upper_freqs = np.array(list(frequency_weights.keys())) * octave_ratio**(1/2)
 
@@ -195,7 +187,7 @@ class AudioProcessor:
         return filtered_signals
         
     def compute_a_weighting(self, filtered_signals, is_octave=True):
-        frequency_weights = self.frequency_weights_octave if is_octave else self.frequency_weights_3rd_octave
+        frequency_weights = helpers.frequency_weights_octave if is_octave else helpers.frequency_weights_3rd_octave
 
         weighted_signal = np.zeros_like(filtered_signals[0])
         for i, filtered_signal in enumerate(filtered_signals):
