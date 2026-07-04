@@ -60,6 +60,8 @@ class AudioDeviceManager:
         self.latest_peak = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
+        self.time_weighting = "Fast"
+        self.latest_time_weighted_value = 0.0
 
         # Leq measurement state for UI display
         self.latest_leq_db = None
@@ -80,6 +82,12 @@ class AudioDeviceManager:
         
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
+
+        # Convert multi-channel input to mono for SPL/Leq processing.
+        # Without this, stereo input would be counted as twice as many samples,
+        # causing fixed-duration Leq measurements to finish too early.
+        if self.num_channels > 1:
+            audio_float = audio_float.reshape(-1, self.num_channels).mean(axis=1)
 
         # Store to audio file
         if self.should_store_recording:
@@ -116,6 +124,16 @@ class AudioDeviceManager:
                 self.latest_leq_is_complete = True
             else:
                 self.latest_leq_is_complete = False
+
+        # Compute audio metrics
+        rms = self.audio_processor.compute_rms(audio_float)
+        spl_db = self.audio_processor.compute_spl_db(audio_float)
+        peak = self.audio_processor.compute_peak(audio_float)
+
+        self.latest_rms = float(rms)
+        self.latest_raw_spl_db = float(spl_db)
+        self.latest_spl_db = float(spl_db + self.calibration_offset_db)
+        self.latest_peak = float(peak)
 
         #Save the data
         self.latest_rms = float(rms)

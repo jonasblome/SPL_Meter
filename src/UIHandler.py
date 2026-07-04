@@ -79,6 +79,11 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <span id="calibration-status">Not calibrated</span>
     </div>
     <hr>
+    <div class="weighting">
+        <strong>Time Weighting:</strong>
+        <label><input type="radio" name="weighting" value="Fast" checked onchange="setWeighting(this.value)"> Fast</label>
+        <label><input type="radio" name="weighting" value="Slow" onchange="setWeighting(this.value)"> Slow</label>
+    </div>
     <div class="status stopped" id="status">Status: Stopped</div>
     <hr>
     <div class="metrics">
@@ -272,8 +277,8 @@ class UIHandler:
         @self.app.route("/weighting", methods=["POST"])
         def weighting():
             data = request.get_json()
-            adm.time_weighting = data.get("weighting", "Fast")
-            return jsonify({"weighting": adm.time_weighting})
+            device_manager.time_weighting = data.get("weighting", "Fast")
+            return jsonify({"weighting": device_manager.time_weighting})
         
         @self.app.route("/leq_duration", methods=["POST"])
         def leq_duration():
@@ -293,15 +298,16 @@ class UIHandler:
             duration_seconds = self.get_leq_duration_seconds()
 
             # Start audio processing automatically if it is not already running.
-            if not adm.is_recording:
+            # Otherwise the Leq measurement would not receive any audio blocks.
+            if not device_manager.is_recording:
                 self._start_recording_thread()
 
-            adm.latest_leq_db = None
-            adm.latest_leq_is_complete = False
+            device_manager.latest_leq_db = None
+            device_manager.latest_leq_is_complete = False
 
-            adm.audio_processor.start_leq_measurement(
+            device_manager.audio_processor.start_leq_measurement(
                 duration_seconds=duration_seconds,
-                sample_rate=adm.sample_rate
+                sample_rate=device_manager.sample_rate
             )
 
             print(f"Leq measurement started for {duration_seconds} s")
@@ -312,7 +318,7 @@ class UIHandler:
             })
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():
-            if not adm.is_recording:
+            if not device_manager.is_recording:
                 return jsonify({
                     "error": "Start measurement before calibration."
                 }), 400
@@ -320,7 +326,7 @@ class UIHandler:
             data = request.get_json() or {}
             reference_db = float(data.get("reference_db", 94.0))
 
-            result = adm.calibrate_microphone(reference_db)
+            result = device_manager.calibrate_microphone(reference_db)
             return jsonify(result)
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
@@ -340,6 +346,11 @@ class UIHandler:
                         "fast":          device_manager.latest_fast_state,
                         "slow":          device_manager.latest_slow_state,
                         "filterband_spl_db": device_manager.latest_filterband_spl_db,
+
+                        # Leq values for the web UI
+                        "leq_db":             device_manager.latest_leq_db,
+                        "leq_is_complete":    device_manager.latest_leq_is_complete,
+                        "leq_is_running":     device_manager.audio_processor.leq_is_running,
                     })
                     yield f"data: {payload}\n\n"
                     time.sleep(0.05)  # 20 Hz update rate

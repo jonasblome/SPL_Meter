@@ -23,9 +23,7 @@ class AudioDeviceSimulator:
         self.latest_rms = 0.0
         self.latest_spl_db = 0.0
         self.latest_peak = 0.0
-        # Prepare filterbank in advance to only calculate once
-        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
-        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
+        
         self.latest_a_weighted_spl_db = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
@@ -38,6 +36,15 @@ class AudioDeviceSimulator:
             self.sample_width = wf.getsampwidth()
             total_frames = wf.getnframes()
             raw = wf.readframes(total_frames)
+        
+        # Prepare filterbank in advance to only calculate once.
+        # This must happen after reading the WAV sample rate.
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(
+            self.sample_rate,
+            is_octave=True
+        )
+        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
+        self.latest_a_weighted_spl_db = 0.0
 
         if self.sample_width == 2:
             self._audio_int = np.frombuffer(raw, dtype=np.int16)
