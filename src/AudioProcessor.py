@@ -113,6 +113,13 @@ class AudioProcessor:
         spl_db = 20 * np.log10(rms / reference_pressure)
         
         return spl_db
+    #Calibrate
+    def detect_level_db(self, audio_data):
+        """Automatically detect the current microphone level in dB."""
+        level_db = self.compute_spl_db(audio_data)
+
+        # mute cant return-inf，UI 
+        return float(max(-120.0, level_db))
     
     #Zeitbewertung in fast and slow
     def compute_time_weighting_factor(self, tau):

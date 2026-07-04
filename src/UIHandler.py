@@ -19,8 +19,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         #btn-start { background: #4CAF50; color: white; }
         #btn-stop  { background: #f44336; color: white; }
         #btn-start:disabled, #btn-stop:disabled { opacity: 0.4; cursor: default; }
-        .weighting { display: flex; gap: 16px; align-items: center; margin: 12px 0; }
-        .weighting label { font-size: 16px; cursor: pointer; }
         .store-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 16px; cursor: pointer; }
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
@@ -32,7 +30,14 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         .filterband-section { margin-top: 24px; }
         .filterband-grid { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
         .filterband-box { display: flex; flex-direction: column; align-items: center; width: 60px; }
-        .filterband-value { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+        .filterband-value {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            text-align: center;
+            line-height: 1.2;
+        }
         .filterband-bar-container { display: flex; flex-direction: column-reverse; width: 30px; height: 150px; background: #f0f2f6; border-radius: 4px; border: 1px solid #e1e4e8; }
         .filterband-bar-fill { background: #ff4b4b; border-radius: 0 0 4px 4px; width: 100%; transition: height 0.2s; }
         .filterband-freq { font-size: 12px; color: #666; margin-top: 4px; }
@@ -46,12 +51,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     <div class="controls">
         <button id="btn-start" onclick="startMeasurement()">Start Measurement</button>
         <button id="btn-stop"  onclick="stopMeasurement()" disabled>Stop Measurement</button>
-    </div>
-    <hr>
-    <div class="weighting">
-        <strong>Time Weighting:</strong>
-        <label><input type="radio" name="weighting" value="Fast" checked onchange="setWeighting(this.value)"> Fast</label>
-        <label><input type="radio" name="weighting" value="Slow" onchange="setWeighting(this.value)"> Slow</label>
     </div>
     <hr>
     <div class="weighting">
@@ -71,6 +70,14 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
         Store Audio
     </label>
+
+    <div class="weighting">
+        <strong>Calibration:</strong>
+        <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
+        <span>dB</span>
+        <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
+        <span id="calibration-status">Not calibrated</span>
+    </div>
     <hr>
     <div class="status stopped" id="status">Status: Stopped</div>
     <hr>
@@ -81,7 +88,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <div class="metric-box"><div class="metric-label">Peak</div><div class="metric-value" id="peak">--</div></div>
         <div class="metric-box"><div class="metric-label">Fast</div><div class="metric-value" id="fast">--</div></div>
         <div class="metric-box"><div class="metric-label">Slow</div><div class="metric-value" id="slow">--</div></div>
-        <div class="metric-box"><div class="metric-label">Time Weighted</div><div class="metric-value" id="tw">--</div></div>
         <div class="metric-box"><div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div></div>
     </div>
     <hr>
@@ -136,7 +142,22 @@ HTML_PAGE_TAIL = """
                 startSSE();
             });
         }
+        function calibrateMicrophone() {
+            const referenceDb = Number(
+                document.getElementById('reference-db').value
+            );
 
+            fetch('/calibrate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reference_db: referenceDb})
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('calibration-status').textContent =
+                    'Offset: ' + data.offset_db.toFixed(2) + ' dB';
+            });
+        }
         function setStoreAudio(checked) {
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
         }
@@ -148,11 +169,10 @@ HTML_PAGE_TAIL = """
                 const d = JSON.parse(e.data);
                 document.getElementById('a-weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
-                document.getElementById('rms').textContent  = d.rms.toFixed(6);
-                document.getElementById('peak').textContent = d.peak.toFixed(6);
-                document.getElementById('fast').textContent = d.fast.toFixed(6);
-                document.getElementById('slow').textContent = d.slow.toFixed(6);
-                document.getElementById('tw').textContent   = d.time_weighted.toFixed(6);
+                document.getElementById('rms').textContent  = d.rms.toFixed(2);
+                document.getElementById('peak').textContent = d.peak.toFixed(2);
+                document.getElementById('fast').textContent = d.fast.toFixed(2);
+                document.getElementById('slow').textContent = d.slow.toFixed(2);
                 if (d.leq_is_running) {
                     document.getElementById('leq').textContent = 'running...';
                 } else if (d.leq_db !== null) {
@@ -164,7 +184,7 @@ HTML_PAGE_TAIL = """
                         const fill = document.getElementById('band-' + i + '-fill');
                         const value = document.getElementById('band-' + i + '-value');
                         if (fill) fill.style.height = (normalized * 100).toFixed(1) + '%';
-                        if (value) value.textContent = spl.toFixed(1) + ' dB';
+                        if (value) value.textContent = spl.toFixed(1) + '\u00A0dB';
                     });
                 }
             };
@@ -233,7 +253,7 @@ class UIHandler:
         return HTML_PAGE_HEAD + boxes + HTML_PAGE_TAIL
 
     def _register_routes(self):
-        adm = self.audio_device_manager
+        device_manager = self.audio_device_manager
 
         @self.app.route("/")
         def index():
@@ -290,35 +310,39 @@ class UIHandler:
                 "status": "started",
                 "duration_seconds": duration_seconds
             })
+        @self.app.route("/calibrate", methods=["POST"])
+        def calibrate():
+            if not adm.is_recording:
+                return jsonify({
+                    "error": "Start measurement before calibration."
+                }), 400
 
+            data = request.get_json() or {}
+            reference_db = float(data.get("reference_db", 94.0))
+
+            result = adm.calibrate_microphone(reference_db)
+            return jsonify(result)
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
             data = request.get_json()
-            adm.should_store_recording = bool(data.get("store", False))
-            return jsonify({"store": adm.should_store_recording})
+            device_manager.should_store_recording = bool(data.get("store", False))
+            return jsonify({"store": device_manager.should_store_recording})
 
         @self.app.route("/stream")
         def stream():
             def event_generator():
-                while adm.is_recording:
+                while device_manager.is_recording:
                     payload = json.dumps({
-                        "a_weighted": getattr(adm, "latest_a_weighted_spl_db", 0.0),
-                        "spl_db": getattr(adm, "latest_spl_db", 0.0),
-                        "rms": getattr(adm, "latest_rms", 0.0),
-                        "peak": getattr(adm, "latest_peak", 0.0),
-
-                        "fast": getattr(adm, "latest_fast_state", 0.0),
-                        "slow": getattr(adm, "latest_slow_state", 0.0),
-                        "time_weighted": getattr(adm, "latest_time_weighted_value", 0.0),
-
-                        "leq_db": getattr(adm, "latest_leq_db", None),
-                        "leq_is_complete": getattr(adm, "latest_leq_is_complete", False),
-                        "leq_is_running": getattr(adm.audio_processor, "leq_is_running", False),
-
-                        "filterband_spl_db": getattr(adm, "latest_filterband_spl_db", []),
-})
+                        "spl_db":        device_manager.latest_spl_db,
+                        "rms":           device_manager.latest_rms,
+                        "peak":          device_manager.latest_peak,
+                        "a_weighted":    device_manager.latest_a_weighted_spl_db,
+                        "fast":          device_manager.latest_fast_state,
+                        "slow":          device_manager.latest_slow_state,
+                        "filterband_spl_db": device_manager.latest_filterband_spl_db,
+                    })
                     yield f"data: {payload}\n\n"
-                    time.sleep(0.2)
+                    time.sleep(0.05)  # 20 Hz update rate
             return Response(event_generator(), mimetype="text/event-stream")
 
     def _start_recording_thread(self):

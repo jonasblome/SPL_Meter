@@ -36,8 +36,7 @@ class AudioDeviceManager:
         print("AudioDeviceManager: Initializing")
 
         # Device/recording state
-        self.device_index = device_index
-        self.num_channels = 2
+        self.set_device_index(device_index)
         self.recording_format = pyaudio.paInt32
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
@@ -47,17 +46,20 @@ class AudioDeviceManager:
 
         # Audio processing
         self.audio_processor = audio_processor
+        self.latest_spl_db = 0.0
+        self.latest_rms = 0.0
+        self.latest_peak = 0.0
         # Prepare filterbank in advance to only calculate once
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_spl_db = 0.0
+        self.latest_raw_spl_db = 0.0
+        self.calibration_offset_db = 0.0
         self.latest_peak = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
-        self.latest_time_weighted_value = 0.0
-        self.time_weighting = "Fast"
 
         # Leq measurement state for UI display
         self.latest_leq_db = None
@@ -78,11 +80,15 @@ class AudioDeviceManager:
         
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
+
+        # Store to audio file
+        if self.should_store_recording:
+            self.store_recording(audio_float)
         
         # Compute audio metrics
-        rms = self.audio_processor.compute_rms(audio_float)
-        spl_db = self.audio_processor.compute_spl_db(audio_float)
-        peak = self.audio_processor.compute_peak(audio_float)
+        self.latest_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
+        self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
+        self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
 
         # Compute filterband levels and A-weighting
         filtered_signals = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
@@ -90,9 +96,7 @@ class AudioDeviceManager:
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
         ]
-        self.latest_a_weighted_spl_db = float(
-            max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals))
-        )
+        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals)))
 
         # Time weighting
         self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
@@ -120,10 +124,21 @@ class AudioDeviceManager:
         self.latest_time_weighted_value = float(latest_time_weighted_value)
 
         # Output raw data
-        # print(f"RMS: {self.latest_rms:.6f}, SPL: {self.latest_spl_db:.2f} dB, Peak: {self.latest_peak:.6f}, Time Weighted: {self.latest_time_weighted_value:.6f}")
+        # print(f"RMS: {self.latest_rms:.2f}, SPL: {self.latest_spl_db:.2f} dB,"
+        #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
         
         return (in_data, pyaudio.paContinue)
-        
+    #calibration
+    def calibrate_microphone(self, reference_db):
+        """Calculate calibration offset from the current detected SPL."""
+        self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db
+
+        return {
+            "reference_db": float(reference_db),
+            "measured_db": self.latest_raw_spl_db,
+            "offset_db": self.calibration_offset_db,
+        }
+
     def start_recording(self):
         """Start recording from the microphone"""
         try:
