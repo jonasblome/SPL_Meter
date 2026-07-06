@@ -1,5 +1,3 @@
-import argparse
-
 class CommandLineHandler:
     def __init__(self, audio_device_manager=None):
         print("CommandLineHandler: Initializing")
