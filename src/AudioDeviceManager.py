@@ -69,6 +69,8 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
+        self.recordings_dir = "/mnt/usb_share/recordings"
+        os.makedirs(self.recordings_dir, exist_ok=True)
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -174,7 +176,8 @@ class AudioDeviceManager:
         self.is_recording = False
 
         if self.should_store_recording:
-            self.write_recording_to_file(f"{datetime.now()}.wav")
+            file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".wav"
+            self.write_recording_to_file(os.path.join(self.recordings_dir, file_name))
 
         if self.stream:
             try:

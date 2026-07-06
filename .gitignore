@@ -218,5 +218,5 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Docs
-docs/mass-storage-gadget.pdf
-docs/mass_storage_device.txt
+# docs/mass-storage-gadget.pdf
+# docs/mass_storage_device.txt
