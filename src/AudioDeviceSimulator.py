@@ -20,8 +20,9 @@ class AudioDeviceSimulator:
 
         # Audio processing
         self.audio_processor = audio_processor
-        self.latest_rms = 0.0
+        self.latest_raw_spl_db = 0.0
         self.latest_spl_db = 0.0
+        self.latest_rms = 0.0
         self.latest_peak = 0.0
         
         self.latest_a_weighted_spl_db = 0.0
@@ -102,12 +103,10 @@ class AudioDeviceSimulator:
 
     def _process_chunk(self, audio_float):
         """Process one chunk — same logic as AudioDeviceManager._audio_callback"""
+        self.latest_raw_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
+        self.latest_spl_db = self.latest_raw_spl_db
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
-        self.latest_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
-
-        self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
-        self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
 
         # Compute filterband levels and A-weighting
         filtered_signals = self.audio_processor.apply_filterbank(audio_float, self.filterbank)

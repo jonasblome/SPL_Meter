@@ -79,13 +79,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <span id="calibration-status">Not calibrated</span>
     </div>
     <hr>
-    <div class="weighting">
-        <strong>Time Weighting:</strong>
-        <label><input type="radio" name="weighting" value="Fast" checked onchange="setWeighting(this.value)"> Fast</label>
-        <label><input type="radio" name="weighting" value="Slow" onchange="setWeighting(this.value)"> Slow</label>
-    </div>
-    <div class="status stopped" id="status">Status: Stopped</div>
-    <hr>
     <div class="metrics">
         <div class="metric-box"><div class="metric-label">A-Weighted</div><div class="metric-value" id="a-weighted">-- dB</div></div>
         <div class="metric-box"><div class="metric-label">SPL</div><div class="metric-value" id="spl">-- dB</div></div>
