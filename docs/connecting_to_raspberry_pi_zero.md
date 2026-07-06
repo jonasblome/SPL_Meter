@@ -4,6 +4,37 @@ Diese Anleitung beschreibt Schritt für Schritt, wie man sich vom Windows-PC per
 
 ---
 
+## 0. USB-Kabel korrekt anschließen (für Mass Storage Gadget)
+
+Der Pi Zero W hat **zwei Micro-USB-Anschlüsse**. Die Reihenfolge beim Anschließen ist wichtig:
+
+```
+[PWR IN]  [USB]  [Mini HDMI]  [SD-Karte]
+  ^          ^
+  |          └── Data + Strom → an Windows-PC
+  └── Nur Strom → an Netzteil / Powerbank
+```
+
+### Richtige Reihenfolge
+
+1. **Zuerst Stromversorgung** – Kabel an den **PWR IN**-Port (äußerer, linker Anschluss) an ein Netzteil oder eine Powerbank anschließen.
+2. **Warten** bis der Pi vollständig gebootet hat (ca. 30–60 Sekunden).
+3. **Dann Data-Kabel** – ein zweites **Charge & Sync**-Kabel an den **USB**-Port (mittlerer Anschluss, näher an HDMI) zum Windows-PC anschließen.
+
+> **Wichtig:** Viele Micro-USB-Kabel sind reine Ladekabel ohne Datenleitungen. Es muss explizit ein **Charge & Sync** Kabel verwendet werden.
+
+> **Warum diese Reihenfolge?** Das configfs-Gadget-Script läuft beim Boot. Wenn das Data-Kabel schon vor dem vollständigen Boot am PC hängt, erkennt Windows das Gerät als „Unknown Device (Code 43)". Erst nach vollständigem Boot ist das Laufwerk korrekt konfiguriert.
+
+### Prüfen ob die Verbindung funktioniert
+
+Nach dem Anschließen des Data-Kabels auf dem Pi prüfen:
+```bash
+cat /sys/class/udc/20980000.usb/state
+```
+→ Muss `configured` ausgeben. Dann erscheint das Laufwerk im Windows Datei-Explorer.
+
+---
+
 ## 0. Erstverbindung über WLAN (bei Neuinstallation / neuer SD-Karte)
 
 Falls der Pi frisch aufgesetzt wurde und Tailscale noch nicht installiert ist, kann man sich über das lokale WLAN verbinden, um Tailscale einzurichten.

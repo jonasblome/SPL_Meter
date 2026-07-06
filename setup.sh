@@ -7,19 +7,18 @@ echo "========================================"
 
 # 1. Systemabhängigkeiten
 echo ""
-echo "[1/4] Installiere Systemabhängigkeiten..."
+echo "[1/5] Installiere Systemabhängigkeiten..."
 sudo apt update
 sudo apt install -y \
     git \
     python3-pip \
     python3-venv \
     libopenblas-dev \
-    portaudio19-dev \
-    raspi-gpio
+    portaudio19-dev
 
 # 2. I2S-Konfiguration prüfen
 echo ""
-echo "[2/4] Prüfe I2S-Konfiguration..."
+echo "[2/5] Prüfe I2S-Konfiguration..."
 CONFIG_FILE="/boot/firmware/config.txt"
 if [ ! -f "$CONFIG_FILE" ]; then
     CONFIG_FILE="/boot/config.txt"
@@ -42,7 +41,7 @@ fi
 
 # 3. Virtual Environment einrichten
 echo ""
-echo "[3/4] Richte Virtual Environment ein..."
+echo "[3/5] Richte Virtual Environment ein..."
 if [ ! -d "spl_meter_env" ]; then
     python3 -m venv spl_meter_env
 fi
@@ -50,7 +49,7 @@ source spl_meter_env/bin/activate
 
 # 4. Python-Pakete installieren (nur Binär-Wheels, kein Kompilieren)
 echo ""
-echo "[4/4] Installiere Python-Pakete (piwheels, kein Kompilieren)..."
+echo "[4/5] Installiere Python-Pakete (piwheels, kein Kompilieren)..."
 pip install --only-binary :all: -r requirements.txt
 
 # 5. systemd-Service für Autostart einrichten
