@@ -53,14 +53,35 @@ echo ""
 echo "[4/4] Installiere Python-Pakete (piwheels, kein Kompilieren)..."
 pip install --only-binary :all: -r requirements.txt
 
+# 5. systemd-Service für Autostart einrichten
+echo ""
+echo "[5/5] Richte Autostart-Service ein..."
+PROJECT_DIR="$(pwd)"
+PYTHON_BIN="$PROJECT_DIR/spl_meter_env/bin/python3"
+SERVICE_USER="${SUDO_USER:-$USER}"
+SERVICE_FILE="spl-meter.service"
+
+sed -e "s|USER_PLACEHOLDER|$SERVICE_USER|g" \
+    -e "s|WORKDIR_PLACEHOLDER|$PROJECT_DIR|g" \
+    -e "s|PYTHON_PLACEHOLDER|$PYTHON_BIN|g" \
+    "$PROJECT_DIR/$SERVICE_FILE" | sudo tee /etc/systemd/system/$SERVICE_FILE > /dev/null
+
+sudo systemctl daemon-reload
+sudo systemctl enable $SERVICE_FILE
+
 echo ""
 echo "========================================"
 echo " Setup abgeschlossen!"
 echo "========================================"
 echo ""
-echo "Programm starten:"
+echo "Service verwalten:"
+echo "  sudo systemctl start  spl-meter.service"
+echo "  sudo systemctl stop   spl-meter.service"
+echo "  sudo systemctl status spl-meter.service"
+echo ""
+echo "Manuell starten:"
 echo "  source spl_meter_env/bin/activate"
-echo "  python3 src/audio_input.py"
+echo "  python3 src/main.py"
 echo ""
 
 if [ "$I2S_MISSING" = true ]; then
