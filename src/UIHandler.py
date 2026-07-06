@@ -3,6 +3,8 @@ import json
 import threading
 import helpers
 from flask import Flask, Response, request, jsonify
+from MeasurementExporter import MeasurementExporter
+from datetime import datetime
 
 HTML_PAGE_HEAD = """<!DOCTYPE html>
 <html lang="en">
@@ -51,6 +53,9 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     <div class="controls">
         <button id="btn-start" onclick="startMeasurement()">Start Measurement</button>
         <button id="btn-stop"  onclick="stopMeasurement()" disabled>Stop Measurement</button>
+        <div class="export">
+            <button onclick="downloadJson()">Download JSON</button>
+        </div>
     </div>
     <hr>
     <label class="store-toggle">
@@ -129,8 +134,13 @@ HTML_PAGE_TAIL = """
                     'Offset: ' + data.offset_db.toFixed(2) + ' dB';
             });
         }
+
         function setStoreAudio(checked) {
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
+        }
+
+        function downloadJson() {
+            window.location.href = '/export_json';
         }
 
         function startSSE() {
@@ -164,11 +174,23 @@ class UIHandler:
     def __init__(self, audio_device_manager, host="0.0.0.0", port=8501):
         print("UIHandler: Initializing")
         self.audio_device_manager = audio_device_manager
+
+        # Available Leq measurement durations in seconds.
+        # The selected index can later be controlled by the web UI.
+        self.leq_durations_seconds = [5, 10, 15, 30, 60, 300]
+        self.leq_duration_index = 0
+        
+        self.measurement_exporter = MeasurementExporter()
         self.recording_thread = None
         self.app = Flask(__name__)
         self._register_routes()
         self.host = host
         self.port = port
+
+
+    def get_leq_duration_seconds(self):
+        """Return the currently selected Leq measurement duration in seconds."""
+        return self.leq_durations_seconds[self.leq_duration_index]
 
     def _get_html_page(self):
         boxes = "".join(
@@ -203,11 +225,12 @@ class UIHandler:
         @self.app.route("/weighting", methods=["POST"])
         def weighting():
             data = request.get_json()
-            adm.time_weighting = data.get("weighting", "Fast")
-            return jsonify({"weighting": adm.time_weighting})
+            device_manager.time_weighting = data.get("weighting", "Fast")
+            return jsonify({"weighting": device_manager.time_weighting})
+        
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():
-            if not adm.is_recording:
+            if not device_manager.is_recording:
                 return jsonify({
                     "error": "Start measurement before calibration."
                 }), 400
@@ -215,8 +238,9 @@ class UIHandler:
             data = request.get_json() or {}
             reference_db = float(data.get("reference_db", 94.0))
 
-            result = adm.calibrate_microphone(reference_db)
+            result = device_manager.calibrate_microphone(reference_db)
             return jsonify(result)
+        
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
             data = request.get_json()
@@ -239,6 +263,28 @@ class UIHandler:
                     yield f"data: {payload}\n\n"
                     time.sleep(0.05)  # 20 Hz update rate
             return Response(event_generator(), mimetype="text/event-stream")
+        
+        @self.app.route("/export_json", methods=["GET"])
+        def export_json():
+            leq_duration_seconds = self.get_leq_duration_seconds()
+
+            measurement_data = self.measurement_exporter.create_measurement_snapshot(
+                device_manager,
+                leq_duration_seconds=leq_duration_seconds
+            )
+
+            json_string = self.measurement_exporter.to_json_string(measurement_data)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"spl_measurement_{timestamp}.json"
+
+            return Response(
+                json_string,
+                mimetype="application/json",
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}"
+                }
+            )
 
     def _start_recording_thread(self):
         if self.recording_thread is None or not self.recording_thread.is_alive():
