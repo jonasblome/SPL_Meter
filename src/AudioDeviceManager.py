@@ -46,20 +46,24 @@ class AudioDeviceManager:
 
         # Audio processing
         self.audio_processor = audio_processor
+        self.latest_raw_spl_db = 0.0
+        self.calibration_offset_db = 0.0
         self.latest_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_peak = 0.0
+        
         # Prepare filterbank in advance to only calculate once
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
-        self.latest_rms = 0.0
-        self.latest_spl_db = 0.0
-        self.latest_raw_spl_db = 0.0
-        self.calibration_offset_db = 0.0
-        self.latest_peak = 0.0
+
+        # Time weighting
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
+
+        # Leq measurement state for UI display
+        self.latest_leq_db = None
+        self.latest_leq_is_complete = False
 
         # File recording
         self.storing_format = pyaudio.paFloat32
@@ -77,12 +81,19 @@ class AudioDeviceManager:
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
 
+        # Convert multi-channel input to mono for SPL/Leq processing.
+        # Without this, stereo input would be counted as twice as many samples,
+        # causing fixed-duration Leq measurements to finish too early.
+        if self.num_channels > 1:
+            audio_float = audio_float.reshape(-1, self.num_channels).mean(axis=1)
+
         # Store to audio file
         if self.should_store_recording:
             self.store_recording(audio_float)
         
         # Compute audio metrics
-        self.latest_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
+        self.latest_raw_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
+        self.latest_spl_db = float(self.latest_raw_spl_db + self.calibration_offset_db)
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
 
@@ -97,13 +108,23 @@ class AudioDeviceManager:
         # Time weighting
         self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
         self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
+        
+        # Process Leq measurement if one is currently running.
+        if self.audio_processor.leq_is_running:
+            leq_db, leq_is_complete = self.audio_processor.process_leq_measurement(audio_float)
+
+            if leq_is_complete:
+                self.latest_leq_db = float(leq_db)
+                self.latest_leq_is_complete = True
+            else:
+                self.latest_leq_is_complete = False
 
         # Output raw data
         # print(f"RMS: {self.latest_rms:.2f}, SPL: {self.latest_spl_db:.2f} dB,"
         #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
         
         return (in_data, pyaudio.paContinue)
-    #calibration
+    
     def calibrate_microphone(self, reference_db):
         """Calculate calibration offset from the current detected SPL."""
         self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db

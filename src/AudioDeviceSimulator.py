@@ -20,15 +20,16 @@ class AudioDeviceSimulator:
 
         # Audio processing
         self.audio_processor = audio_processor
-        self.latest_rms = 0.0
+        self.latest_raw_spl_db = 0.0
         self.latest_spl_db = 0.0
+        self.latest_rms = 0.0
         self.latest_peak = 0.0
-        # Prepare filterbank in advance to only calculate once
-        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
-        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
+        
         self.latest_a_weighted_spl_db = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
+        self.latest_leq_db = None
+        self.latest_leq_is_complete = False
 
         with wave.open(self.wav_path, "rb") as wf:
             self.sample_rate = wf.getframerate()
@@ -36,6 +37,15 @@ class AudioDeviceSimulator:
             self.sample_width = wf.getsampwidth()
             total_frames = wf.getnframes()
             raw = wf.readframes(total_frames)
+        
+        # Prepare filterbank in advance to only calculate once.
+        # This must happen after reading the WAV sample rate.
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(
+            self.sample_rate,
+            is_octave=True
+        )
+        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
+        self.latest_a_weighted_spl_db = 0.0
 
         if self.sample_width == 2:
             self._audio_int = np.frombuffer(raw, dtype=np.int16)
@@ -93,8 +103,9 @@ class AudioDeviceSimulator:
 
     def _process_chunk(self, audio_float):
         """Process one chunk — same logic as AudioDeviceManager._audio_callback"""
+        self.latest_raw_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
+        self.latest_spl_db = self.latest_raw_spl_db
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
-        self.latest_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
 
         # Compute filterband levels and A-weighting
