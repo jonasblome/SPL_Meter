@@ -197,6 +197,8 @@ class AudioDeviceManager:
             finally:
                 self.audio = None
 
+        print("Stopped recording")
+
     def store_recording(self, recording_data):
         self.recording_data_blocks.append(recording_data)
 
