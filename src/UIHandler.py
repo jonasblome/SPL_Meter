@@ -70,7 +70,6 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
         Store Audio
     </label>
-
     <div class="weighting">
         <strong>Calibration:</strong>
         <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
@@ -78,6 +77,8 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
         <span id="calibration-status">Not calibrated</span>
     </div>
+    <hr>
+    <div class="status stopped" id="status">Status: Stopped</div>
     <hr>
     <div class="metrics">
         <div class="metric-box"><div class="metric-label">A-Weighted</div><div class="metric-value" id="a-weighted">-- dB</div></div>
