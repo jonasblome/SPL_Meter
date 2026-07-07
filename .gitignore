@@ -216,3 +216,7 @@ __marimo__/
 
 # Other
 .vscode/settings.json
+
+# Docs
+# docs/mass-storage-gadget.pdf
+# docs/mass_storage_device.txt
