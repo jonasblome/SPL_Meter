@@ -49,6 +49,8 @@ class AudioDeviceManager:
         self.latest_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_peak = 0.0
+        self.latest_leq_db = None
+        self.latest_leq_is_complete = False
         # Prepare filterbank in advance to only calculate once
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
@@ -60,6 +62,9 @@ class AudioDeviceManager:
         self.latest_peak = 0.0
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
+        # Latest Leq values used by the UI stream and JSON export.
+        self.latest_leq_db = None
+        self.latest_leq_is_complete = False
 
         # File recording
         self.storing_format = pyaudio.paFloat32
@@ -77,10 +82,30 @@ class AudioDeviceManager:
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
 
+        # Convert multi-channel audio to mono before SPL/Leq processing.
+        # PyAudio's frame_count is the number of time samples per channel.
+        # If audio_float contains more values than frame_count, the extra values are channels.
+        if frame_count > 0 and len(audio_float) > frame_count:
+            channels = len(audio_float) // frame_count
+            audio_float = audio_float[:frame_count * channels]
+            audio_float = audio_float.reshape(frame_count, channels).mean(axis=1)
+
         # Store to audio file
         if self.should_store_recording:
             self.store_recording(audio_float)
         
+        # If a Leq measurement is active, process the current audio block.
+        # Once the selected duration is complete, store the final Leq value for the UI and export.
+        if self.audio_processor.leq_is_running:
+            leq_db, leq_is_complete = self.audio_processor.process_leq_measurement(audio_float)
+
+            if leq_is_complete:
+                self.latest_leq_db = float(leq_db)
+                self.latest_leq_is_complete = True
+                print(f"Leq complete: {self.latest_leq_db:.2f} dB")
+            else:
+                self.latest_leq_is_complete = False
+
         # Compute audio metrics
         self.latest_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float))

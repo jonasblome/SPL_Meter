@@ -62,7 +62,19 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
         Store Audio
     </label>
-
+    <hr>
+    <div class="Leq">
+        <strong>Leq Duration:</strong>
+        <select id="leq-duration" onchange="setLeqDuration(this.value)">
+            <option value="0" selected>5 s</option>
+            <option value="1">10 s</option>
+            <option value="2">15 s</option>
+            <option value="3">30 s</option>
+            <option value="4">60 s</option>
+            <option value="5">300 s</option>
+        </select>
+        <button onclick="startLeqMeasurement()">Start Leq</button>
+    </div>
     <div class="weighting">
         <strong>Calibration:</strong>
         <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
@@ -80,6 +92,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <div class="metric-box"><div class="metric-label">Peak</div><div class="metric-value" id="peak">--</div></div>
         <div class="metric-box"><div class="metric-label">Fast</div><div class="metric-value" id="fast">--</div></div>
         <div class="metric-box"><div class="metric-label">Slow</div><div class="metric-value" id="slow">--</div></div>
+        <div class="metric-box"><div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div></div>
     </div>
     <hr>
     <div class="filterband-section">
@@ -139,6 +152,21 @@ HTML_PAGE_TAIL = """
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
         }
 
+        function setLeqDuration(index) {
+            fetch('/leq_duration', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({index: Number(index)})
+            });
+        }
+
+        function startLeqMeasurement() {
+            fetch('/leq_start', {method: 'POST'}).then(() => {
+                document.getElementById('leq').textContent = 'running...';
+                startSSE();
+            });
+        }
+
         function downloadJson() {
             window.location.href = '/export_json';
         }
@@ -154,6 +182,11 @@ HTML_PAGE_TAIL = """
                 document.getElementById('peak').textContent = d.peak.toFixed(2);
                 document.getElementById('fast').textContent = d.fast.toFixed(2);
                 document.getElementById('slow').textContent = d.slow.toFixed(2);
+                if (d.leq_is_running) {
+                    document.getElementById('leq').textContent = 'running...';
+                } else if (d.leq_db !== null && d.leq_db !== undefined) {
+                    document.getElementById('leq').textContent = d.leq_db.toFixed(2) + ' dB';
+                }
                 if (d.filterband_spl_db) {
                     d.filterband_spl_db.forEach((spl, i) => {
                         const normalized = Math.max(0.0, Math.min(1.0, (spl + 100.0) / 200.0));
@@ -191,6 +224,14 @@ class UIHandler:
     def get_leq_duration_seconds(self):
         """Return the currently selected Leq measurement duration in seconds."""
         return self.leq_durations_seconds[self.leq_duration_index]
+    
+    def set_leq_duration_index(self, index):
+        """Select a Leq duration by index."""
+        if index < 0 or index >= len(self.leq_durations_seconds):
+            raise ValueError("Invalid Leq duration index")
+
+        self.leq_duration_index = index
+        return self.get_leq_duration_seconds()
 
     def _get_html_page(self):
         boxes = "".join(
@@ -228,6 +269,41 @@ class UIHandler:
             device_manager.time_weighting = data.get("weighting", "Fast")
             return jsonify({"weighting": device_manager.time_weighting})
         
+        @self.app.route("/leq_duration", methods=["POST"])
+        def leq_duration():
+            data = request.get_json()
+            index = int(data.get("index", 0))
+
+            duration_seconds = self.set_leq_duration_index(index)
+
+            print(f"Leq duration set to {duration_seconds} s")
+
+            return jsonify({
+                "duration_seconds": duration_seconds
+            })
+        
+        @self.app.route("/leq_start", methods=["POST"])
+        def leq_start():
+            duration_seconds = self.get_leq_duration_seconds()
+
+            if not device_manager.is_recording:
+                self._start_recording_thread()
+
+            device_manager.latest_leq_db = None
+            device_manager.latest_leq_is_complete = False
+
+            device_manager.audio_processor.start_leq_measurement(
+                duration_seconds=duration_seconds,
+                sample_rate=device_manager.sample_rate
+            )
+
+            print(f"Leq measurement started for {duration_seconds} s")
+
+            return jsonify({
+                "status": "started",
+                "duration_seconds": duration_seconds
+            })
+        
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():
             if not device_manager.is_recording:
@@ -259,6 +335,9 @@ class UIHandler:
                         "fast":          device_manager.latest_fast_state,
                         "slow":          device_manager.latest_slow_state,
                         "filterband_spl_db": device_manager.latest_filterband_spl_db,
+                        "leq_db":        device_manager.latest_leq_db,
+                        "leq_is_complete": device_manager.latest_leq_is_complete,
+                        "leq_is_running": device_manager.audio_processor.leq_is_running,
                     })
                     yield f"data: {payload}\n\n"
                     time.sleep(0.05)  # 20 Hz update rate
