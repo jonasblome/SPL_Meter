@@ -50,6 +50,9 @@ class SPLMeter:
             thread.join(timeout=2)
             if thread.is_alive():
                 print("Warning: recording thread did not exit within timeout.")
+
+    def calibrate(self, reference_db):
+        self.audio_device_manager.calibrate_microphone(reference_db)
     
     def measure(self, length):
         def stop_measurement():

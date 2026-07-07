@@ -4,6 +4,7 @@ import argparse
 parser = argparse.ArgumentParser(description="An SPL Meter.")
 parser.add_argument("-s", "--simulate", type=str, help="Simulate audio input using a 16/32 bit .wav file.")
 parser.add_argument("-m", "--measure", type=int, help="Start a measurement of a fixed length, providing the length in seconds")
+parser.add_argument("-c", "--calibrate", type=int, help="Calibrate the microphone and store the calibration value for the next measurement")
 args = parser.parse_args()
 
 def main():
@@ -20,11 +21,17 @@ def main():
     # Start SPL Meter
     spl_meter = spl.SPLMeter(should_simulate=should_simulate, wav_path=wav_path)
     
-    start_ui = args.measure is None
+    # Process arguments
+    should_calibrate = args.calibrate is not None
+    should_measure = args.measure is not None
+    start_ui = not should_calibrate and not should_measure
+
     if start_ui:
         spl_meter.run()
-    else:
-        # Fixed measurement without UI
+    elif should_calibrate:
+        reference_db = int(args.calibrate)
+        spl_meter.calibrate(reference_db)
+    elif should_measure:
         measurement_length = int(args.measure)
         spl_meter.measure(measurement_length)
 

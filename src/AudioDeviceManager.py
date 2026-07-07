@@ -128,7 +128,7 @@ class AudioDeviceManager:
     def calibrate_microphone(self, reference_db):
         """Calculate calibration offset from the current detected SPL."""
         self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db
-
+        
         return {
             "reference_db": float(reference_db),
             "measured_db": self.latest_raw_spl_db,
