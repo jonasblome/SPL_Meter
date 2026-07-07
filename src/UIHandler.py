@@ -53,19 +53,9 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     <div class="controls">
         <button id="btn-start" onclick="startMeasurement()">Start Measurement</button>
         <button id="btn-stop"  onclick="stopMeasurement()" disabled>Stop Measurement</button>
-    </div>
-    <hr>
-    <div class="weighting">
-        <strong>Leq Duration:</strong>
-        <select id="leq-duration" onchange="setLeqDuration(this.value)">
-            <option value="0">5 s</option>
-            <option value="1" selected>10 s</option>
-            <option value="2">15 s</option>
-            <option value="3">30 s</option>
-            <option value="4">60 s</option>
-            <option value="5">300 s</option>
-        </select>
-        <button onclick="startLeqMeasurement()">Start Leq</button>
+    <div class="export">
+        <button onclick="downloadJson()">Download JSON</button>
+        </div>
     </div>
     <hr>
     <label class="store-toggle">
@@ -175,21 +165,6 @@ HTML_PAGE_TAIL = """
 
         function setStoreAudio(checked) {
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
-        }
-
-        function setLeqDuration(index) {
-            fetch('/leq_duration', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({index: Number(index)})
-            });
-        }
-
-        function startLeqMeasurement() {
-            fetch('/leq_start', {method: 'POST'}).then(() => {
-                document.getElementById('leq').textContent = 'running...';
-                startSSE();
-            });
         }
 
         function downloadJson() {
@@ -339,41 +314,6 @@ class UIHandler:
             device_manager.time_weighting = data.get("weighting", "Fast")
             return jsonify({"weighting": device_manager.time_weighting})
         
-        @self.app.route("/leq_duration", methods=["POST"])
-        def leq_duration():
-            data = request.get_json()
-            index = int(data.get("index", 0))
-
-            duration_seconds = self.set_leq_duration_index(index)
-
-            print(f"Leq duration set to {duration_seconds} s")
-
-            return jsonify({
-                "duration_seconds": duration_seconds
-            })
-        
-        @self.app.route("/leq_start", methods=["POST"])
-        def leq_start():
-            duration_seconds = self.get_leq_duration_seconds()
-
-            if not device_manager.is_recording:
-                self._start_recording_thread()
-
-            device_manager.latest_leq_db = None
-            device_manager.latest_leq_is_complete = False
-
-            device_manager.audio_processor.start_leq_measurement(
-                duration_seconds=duration_seconds,
-                sample_rate=device_manager.sample_rate
-            )
-
-            print(f"Leq measurement started for {duration_seconds} s")
-
-            return jsonify({
-                "status": "started",
-                "duration_seconds": duration_seconds
-            })
-        
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():
             if not device_manager.is_recording:
@@ -417,7 +357,10 @@ class UIHandler:
         
         @self.app.route("/export_json", methods=["GET"])
         def export_json():
-            leq_duration_seconds = self.get_leq_duration_seconds()
+            if hasattr(self, "leq_durations_seconds") and hasattr(self, "leq_duration_index"):
+                leq_duration_seconds = self.leq_durations_seconds[self.leq_duration_index]
+            else:
+                leq_duration_seconds = None
 
             measurement_data = self.measurement_exporter.create_measurement_snapshot(
                 device_manager,

@@ -64,6 +64,14 @@ class AudioDeviceManager:
         # Latest Leq values used by the UI stream and JSON export.
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
+        # Time series of measurement values for JSON export.
+        # One entry is stored approximately once per second during recording.
+        self.measurement_history = []
+        self.measurement_history_interval_seconds = 1.0
+        self._last_history_sample_time = 0.0
+        self._measurement_start_time = None
+        self.time_weighting = "Fast"
+        self.latest_time_weighted_value = 0.0
 
         # File recording
         self.storing_format = pyaudio.paFloat32
@@ -124,22 +132,66 @@ class AudioDeviceManager:
         # Time weighting
         self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
         self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
-        
-        # Process Leq measurement if one is currently running.
-        if self.audio_processor.leq_is_running:
-            leq_db, leq_is_complete = self.audio_processor.process_leq_measurement(audio_float)
 
-            if leq_is_complete:
-                self.latest_leq_db = float(leq_db)
-                self.latest_leq_is_complete = True
-            else:
-                self.latest_leq_is_complete = False
+        if self.time_weighting == "Fast":
+            self.latest_time_weighted_value = self.latest_fast_state
+        else:
+            self.latest_time_weighted_value = self.latest_slow_state
 
-        # Output raw data
-        # print(f"RMS: {self.latest_rms:.2f}, SPL: {self.latest_spl_db:.2f} dB,"
-        #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
+        self._store_measurement_history_sample()
+
+        # Store timestamped measurement values for JSON export.
+        self._store_measurement_history_sample()
         
         return (in_data, pyaudio.paContinue)
+    
+    def _store_measurement_history_sample(self):
+        """
+        Store one timestamped measurement sample for JSON export.
+
+        The values are stored once per second instead of every audio callback.
+        """
+        if self._measurement_start_time is None:
+            return
+
+        now = time.monotonic()
+
+        if now - self._last_history_sample_time < self.measurement_history_interval_seconds:
+            return
+
+        elapsed_seconds = now - self._measurement_start_time
+
+        sample = {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "elapsed_seconds": round(elapsed_seconds, 3),
+
+            "spl_db": self._safe_float(self.latest_spl_db),
+            "z_weighted_spl_db": self._safe_float(self.latest_spl_db),
+            "raw_spl_db": self._safe_float(getattr(self, "latest_raw_spl_db", None)),
+            "rms": self._safe_float(self.latest_rms),
+            "peak": self._safe_float(self.latest_peak),
+            "a_weighted_spl_db": self._safe_float(self.latest_a_weighted_spl_db),
+
+            "fast_state": self._safe_float(self.latest_fast_state),
+            "slow_state": self._safe_float(self.latest_slow_state),
+            "time_weighted_value": self._safe_float(self.latest_time_weighted_value),
+
+            "leq_db": self._safe_float(getattr(self, "latest_leq_db", None)),
+            "leq_is_complete": bool(getattr(self, "latest_leq_is_complete", False)),
+        }
+
+        self.measurement_history.append(sample)
+        self._last_history_sample_time = now
+
+
+    def _safe_float(self, value):
+        if value is None:
+            return None
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
     
     def calibrate_microphone(self, reference_db):
         """Calculate calibration offset from the current detected SPL."""
@@ -153,6 +205,12 @@ class AudioDeviceManager:
 
     def start_recording(self):
         """Start recording from the microphone"""
+
+        # Reset exported measurement history for the new measurement.
+        self.measurement_history = []
+        self._last_history_sample_time = 0.0
+        self._measurement_start_time = time.monotonic()
+
         try:
             self.is_recording = True
             print(f"Starting recording at {self.sample_rate} Hz...")

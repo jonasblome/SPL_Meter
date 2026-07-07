@@ -21,6 +21,11 @@ class MeasurementExporter:
                 "chunk_size": getattr(device_manager, "chunk_size", None),
                 "time_weighting": getattr(device_manager, "time_weighting", None),
                 "leq_duration_seconds": leq_duration_seconds,
+                "history_interval_seconds": getattr(
+                    device_manager,
+                    "measurement_history_interval_seconds",
+                    None
+                ),
             },
 
             "results": {
@@ -42,6 +47,8 @@ class MeasurementExporter:
             "filterband_spl_db": self._safe_list(
                 getattr(device_manager, "latest_filterband_spl_db", [])
             ),
+            
+            "time_series": list(getattr(device_manager, "measurement_history", [])),
         }
 
     def to_json_string(self, measurement_data):
