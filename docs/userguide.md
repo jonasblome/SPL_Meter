@@ -204,8 +204,8 @@ Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balk
 
 1. Pi einschalten und sicherstellen, dass er mit dem Netzwerk verbunden ist.
 2. Web-UI im Browser öffnen.
+4. Optional: **„Store Audio“** (im Voraus!) aktivieren, um die Aufnahme zu speichern.
 3. Auf **„Start Measurement“** klicken.
-4. Optional: **„Store Audio“** aktivieren, um die Aufnahme zu speichern.
 5. Optional: **„Leq Duration“** wählen und **„Start Leq“** klicken.
 6. Nach der Messung auf **„Stop Measurement“** klicken.
 7. Aufgenommene WAV-Dateien liegen unter `/mnt/usb_share/recordings`.
