@@ -10,8 +10,9 @@ class AudioProcessor:
         self.fast_state = 0.0
         self.slow_state = 0.0
 
-        # State variables for fixed-duration Leq measurement.
-        # Leq is calculated over a selected measurement duration.
+        # State variables for a fixed-duration Leq measurement.
+        # Leq is calculated over a defined measurement time, e.g. 10 seconds.
+        # During the measurement, squared pressure samples are accumulated block by block.
         self.leq_sum_square = 0.0
         self.leq_sample_count = 0
         self.leq_target_sample_count = 0
@@ -24,6 +25,81 @@ class AudioProcessor:
     
     def compute_peak(self, audio_data):
         return np.max(np.abs(audio_data))
+
+    def reset_leq_measurement(self):
+        # Reset all internal values used for Leq measurement.
+        self.leq_sum_square = 0.0
+        self.leq_sample_count = 0
+        self.leq_target_sample_count = 0
+
+        self.leq_duration_seconds = None
+        self.leq_sample_rate = None
+
+        self.leq_is_running = False
+        self.leq_result_db = None
+
+    def start_leq_measurement(self, duration_seconds, sample_rate):
+        """
+        Start a new fixed-duration Leq measurement.
+
+        duration_seconds defines the measurement time selected by the user.
+        sample_rate is needed to convert this time into the required number of samples.
+        """
+        if duration_seconds <= 0:
+            raise ValueError("duration_seconds must be greater than zero")
+        
+        if sample_rate <= 0:
+            raise ValueError("sample_rate must be greater than zero")
+
+        # Make sure no values from a previous Leq measurement are reused.
+        self.reset_leq_measurement()
+
+        self.leq_duration_seconds = duration_seconds
+        self.leq_sample_rate = sample_rate
+
+        # Number of samples required to cover the selected measurement time.
+        # Example: 10 s * 48000 samples/s = 480000 samples.
+        self.leq_target_sample_count = int(duration_seconds * sample_rate)
+
+        self.leq_is_running = True
+        self.leq_result_db = None
+
+    def process_leq_measurement(self, audio_data, reference_pressure=20e-6):
+        """
+        Process one audio block for the running Leq measurement.
+
+        The function returns:
+        - (None, False) while the measurement is still running
+        - (leq_result_db, True) when the selected measurement duration is complete
+        """
+        if not self.leq_is_running:
+            raise RuntimeError("Leq measurement has not been started.")
+        
+        # Only process the number of samples that are still needed.
+        # This prevents the last block from exceeding the selected measurement time.
+        remaining_samples = self.leq_target_sample_count - self.leq_sample_count
+        audio_data = audio_data[:remaining_samples]
+
+        # Leq is an energetic average, so pressure values are squared before averaging.
+        self.leq_sum_square += np.sum(audio_data**2)
+        self.leq_sample_count += len(audio_data)
+
+        # No final Leq value is returned until the selected measurement duration is complete.
+        if self.leq_sample_count < self.leq_target_sample_count:
+            return None, False
+
+        self.leq_is_running = False
+
+        if self.leq_sample_count == 0 or self.leq_sum_square == 0:
+            self.leq_result_db = -np.inf
+        else:
+            mean_square = self.leq_sum_square / self.leq_sample_count
+
+            # Leq formula:
+            # Leq = 10 * log10(mean_square_pressure / reference_pressure^2)
+            self.leq_result_db = 10 * np.log10(mean_square / reference_pressure**2)
+
+        return self.leq_result_db, True
 
     def compute_rms(self, audio_data):
         return np.sqrt(np.mean(audio_data**2))

@@ -265,6 +265,135 @@ SPL_Meter/
 └── README.md                      # Projektbeschreibung
 ```
 
+## USB Mass Storage Gadget Einrichten
+
+Der Pi Zero kann als USB-Massenspeicher (Laufwerk) am Windows-PC erscheinen. Dafür wird eine Image-Datei als Backing Store verwendet.
+
+### Voraussetzungen
+
+- Pi Zero per **USB-Data-Port** (mittlerer Micro-USB-Anschluss, näher an HDMI) am PC angeschlossen
+- SSH-Zugang zum Pi (über Tailscale oder WLAN)
+
+### 1. Backing Store (Image-Datei) erstellen
+
+```bash
+dd if=/dev/zero of=/home/teamrapsberry/backing_store.img bs=1M count=4096
+mkdosfs -F 32 /home/teamrapsberry/backing_store.img
+```
+
+> Erstellt eine 4 GB große FAT32-formatierte Image-Datei. Dauert ca. 5 Minuten.
+
+### 2. `config.txt` anpassen
+
+```bash
+sudo sed -i 's/dtoverlay=dwc2$/dtoverlay=dwc2,dr_mode=peripheral/' /boot/firmware/config.txt
+grep dwc2 /boot/firmware/config.txt
+```
+
+Erwartete Ausgabe: `dtoverlay=dwc2,dr_mode=peripheral`
+
+### 3. Konfliktierende Module deaktivieren
+
+Der Pi hat standardmäßig `g_mass_storage` und `rpi-usb-gadget-ics` aktiviert, die den UDC-Controller blockieren:
+
+```bash
+# g_mass_storage aus den automatisch geladenen Modulen entfernen
+sudo nano /etc/modules-load.d/usb-gadget.conf
+```
+Inhalt auf nur diese eine Zeile reduzieren:
+```
+dwc2
+```
+
+```bash
+# rpi-usb-gadget-ics dauerhaft deaktivieren
+sudo systemctl disable rpi-usb-gadget-ics.service
+sudo systemctl mask rpi-usb-gadget-ics.service
+```
+
+### 4. configfs-Script erstellen
+
+```bash
+cat << 'EOF' | sudo tee /usr/local/sbin/usb_gadget_setup.sh
+#!/bin/bash
+modprobe libcomposite
+mkdir -p /sys/kernel/config/usb_gadget/mygadget
+cd /sys/kernel/config/usb_gadget/mygadget
+echo 0x1d6b > idVendor
+echo 0x0104 > idProduct
+echo 0x0100 > bcdDevice
+echo 0x0200 > bcdUSB
+mkdir -p strings/0x409
+echo "1234567890" > strings/0x409/serialnumber
+echo "TU Berlin" > strings/0x409/manufacturer
+echo "SPL Meter Storage" > strings/0x409/product
+mkdir -p configs/c.1/strings/0x409
+echo "Config 1: Mass Storage" > configs/c.1/strings/0x409/configuration
+echo 250 > configs/c.1/MaxPower
+mkdir -p functions/mass_storage.usb0
+echo 0 > functions/mass_storage.usb0/lun.0/cdrom
+echo 0 > functions/mass_storage.usb0/lun.0/ro
+echo /home/teamrapsberry/backing_store.img > functions/mass_storage.usb0/lun.0/file
+ln -s functions/mass_storage.usb0 configs/c.1/
+ls /sys/class/udc > UDC
+EOF
+sudo chmod +x /usr/local/sbin/usb_gadget_setup.sh
+```
+
+### 5. Script als Autostart einrichten (root crontab)
+
+```bash
+sudo crontab -e
+```
+
+Zeile hinzufügen:
+```
+@reboot /usr/local/sbin/usb_gadget_setup.sh
+```
+
+### 6. Reboot und Prüfung
+
+```bash
+sudo reboot
+```
+
+Nach dem Neustart prüfen:
+```bash
+cat /sys/kernel/config/usb_gadget/mygadget/UDC
+# Erwartete Ausgabe: 20980000.usb
+
+cat /sys/class/udc/20980000.usb/state
+# Erwartete Ausgabe: configured (wenn USB-Kabel am PC angeschlossen)
+```
+
+Windows zeigt das Laufwerk dann im Datei-Explorer an.
+
+### Troubleshooting
+
+#### UDC ist leer nach Reboot
+Das crontab-Script lief zu früh. Script manuell ausführen:
+```bash
+sudo /usr/local/sbin/usb_gadget_setup.sh
+```
+
+#### `Device or resource busy` beim Script
+`g_mass_storage` blockiert den UDC. Entladen und Gadget-Verzeichnis bereinigen:
+```bash
+sudo modprobe -r g_mass_storage
+sudo rmdir /sys/kernel/config/usb_gadget/mygadget/configs/c.1/strings/0x409
+sudo rm /sys/kernel/config/usb_gadget/mygadget/configs/c.1/mass_storage.usb0
+sudo rmdir /sys/kernel/config/usb_gadget/mygadget/configs/c.1/
+sudo rmdir /sys/kernel/config/usb_gadget/mygadget/functions/mass_storage.usb0
+sudo rmdir /sys/kernel/config/usb_gadget/mygadget/strings/0x409
+sudo rmdir /sys/kernel/config/usb_gadget/mygadget/
+sudo /usr/local/sbin/usb_gadget_setup.sh
+```
+
+#### Windows zeigt „Code 43 / Device Descriptor Failed"
+Pi war beim Einstecken des Kabels noch nicht fertig gebootet. Kabel abziehen, warten bis Pi vollständig gebootet ist, dann wieder einstecken.
+
+---
+
 ## Nächste Schritte
 
 1. **Kalibrierung:** Implementiere eine Kalibrierungsfunktion für genaue SPL-Messungen

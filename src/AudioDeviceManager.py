@@ -46,6 +46,8 @@ class AudioDeviceManager:
 
         # Audio processing
         self.audio_processor = audio_processor
+        self.latest_raw_spl_db = 0.0
+        self.calibration_offset_db = 0.0
         self.latest_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_peak = 0.0
@@ -55,11 +57,8 @@ class AudioDeviceManager:
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
-        self.latest_rms = 0.0
-        self.latest_spl_db = 0.0
-        self.latest_raw_spl_db = 0.0
-        self.calibration_offset_db = 0.0
-        self.latest_peak = 0.0
+
+        # Time weighting
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
         # Latest Leq values used by the UI stream and JSON export.
@@ -70,6 +69,8 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
+        self.recordings_dir = "/mnt/usb_share/recordings"
+        os.makedirs(self.recordings_dir, exist_ok=True)
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -107,7 +108,8 @@ class AudioDeviceManager:
                 self.latest_leq_is_complete = False
 
         # Compute audio metrics
-        self.latest_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
+        self.latest_raw_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
+        self.latest_spl_db = float(self.latest_raw_spl_db + self.calibration_offset_db)
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
 
@@ -122,13 +124,23 @@ class AudioDeviceManager:
         # Time weighting
         self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
         self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
+        
+        # Process Leq measurement if one is currently running.
+        if self.audio_processor.leq_is_running:
+            leq_db, leq_is_complete = self.audio_processor.process_leq_measurement(audio_float)
+
+            if leq_is_complete:
+                self.latest_leq_db = float(leq_db)
+                self.latest_leq_is_complete = True
+            else:
+                self.latest_leq_is_complete = False
 
         # Output raw data
         # print(f"RMS: {self.latest_rms:.2f}, SPL: {self.latest_spl_db:.2f} dB,"
         #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
         
         return (in_data, pyaudio.paContinue)
-    #calibration
+    
     def calibrate_microphone(self, reference_db):
         """Calculate calibration offset from the current detected SPL."""
         self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db
@@ -178,7 +190,8 @@ class AudioDeviceManager:
         self.is_recording = False
 
         if self.should_store_recording:
-            self.write_recording_to_file(f"{datetime.now()}.wav")
+            file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".wav"
+            self.write_recording_to_file(os.path.join(self.recordings_dir, file_name))
 
         if self.stream:
             try:
