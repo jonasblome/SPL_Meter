@@ -7,6 +7,7 @@ Simple I2S microphone reader for Raspberry Pi Zero W
 import os
 import time
 import glob
+import helpers
 import numpy as np
 
 os.environ.setdefault("JACK_NO_AUDIO_RESERVATION", "1")
@@ -277,10 +278,10 @@ class AudioDeviceManager:
         # Distribute selected bands across the available range, emphasizing
         # the mid-frequency range which is most relevant for SPL measurement.
         predefined = {
-            4: [4, 6, 7, 9],
-            6: [3, 4, 5, 6, 7, 9],
-            8: [2, 3, 4, 5, 6, 7, 8, 9],
-            10: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            4: [3, 5, 6, 8],
+            6: [2, 3, 4, 5, 6, 8],
+            8: [1, 2, 3, 4, 5, 6, 7, 8],
+            10: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         }
         return predefined.get(count, list(range(total)))
 
