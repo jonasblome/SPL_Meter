@@ -7,18 +7,19 @@ echo "========================================"
 
 # 1. Systemabhängigkeiten
 echo ""
-echo "[1/5] Installiere Systemabhängigkeiten..."
+echo "[1/7] Installiere Systemabhängigkeiten..."
 sudo apt update
 sudo apt install -y \
     git \
     python3-pip \
     python3-venv \
     libopenblas-dev \
-    portaudio19-dev
+    portaudio19-dev \
+    dosfstools
 
 # 2. I2S-Konfiguration prüfen
 echo ""
-echo "[2/5] Prüfe I2S-Konfiguration..."
+echo "[2/7] Prüfe I2S-Konfiguration..."
 CONFIG_FILE="/boot/firmware/config.txt"
 if [ ! -f "$CONFIG_FILE" ]; then
     CONFIG_FILE="/boot/config.txt"
@@ -41,7 +42,7 @@ fi
 
 # 3. Virtual Environment einrichten
 echo ""
-echo "[3/5] Richte Virtual Environment ein..."
+echo "[3/7] Richte Virtual Environment ein..."
 if [ ! -d "spl_meter_env" ]; then
     python3 -m venv spl_meter_env
 fi
@@ -49,12 +50,12 @@ source spl_meter_env/bin/activate
 
 # 4. Python-Pakete installieren (nur Binär-Wheels, kein Kompilieren)
 echo ""
-echo "[4/5] Installiere Python-Pakete (piwheels, kein Kompilieren)..."
+echo "[4/7] Installiere Python-Pakete (piwheels, kein Kompilieren)..."
 pip install --only-binary :all: -r requirements.txt
 
 # 5. systemd-Service für Autostart einrichten
 echo ""
-echo "[5/6] Richte Autostart-Service ein..."
+echo "[5/7] Richte Autostart-Service ein..."
 PROJECT_DIR="$(pwd)"
 PYTHON_BIN="$PROJECT_DIR/spl_meter_env/bin/python3"
 SERVICE_USER="${SUDO_USER:-$USER}"
@@ -70,7 +71,7 @@ sudo systemctl enable $SERVICE_FILE
 
 # 6. WLAN-Connect-Service einrichten (liest wifi_config.json vom USB-Share)
 echo ""
-echo "[6/6] Richte WLAN-Connect-Service ein..."
+echo "[6/7] Richte WLAN-Connect-Service ein..."
 WIFI_SCRIPT="$PROJECT_DIR/wifi_connect.sh"
 WIFI_SERVICE="$PROJECT_DIR/wifi-connect.service"
 
@@ -108,6 +109,34 @@ echo "Manuell starten:"
 echo "  source spl_meter_env/bin/activate"
 echo "  python3 src/main.py"
 echo ""
+
+# 7. USB-Mass-Storage-Gadget einrichten (Pi erscheint als Laufwerk am PC)
+echo ""
+echo "[7/7] Richte USB-Mass-Storage-Gadget ein..."
+USB_GADGET_SCRIPT="$PROJECT_DIR/usb_gadget_setup.sh"
+USB_GADGET_SERVICE="$PROJECT_DIR/usb-gadget.service"
+BACKING_STORE="/home/teamrapsberry/backing_store.img"
+
+if [ ! -f "$USB_GADGET_SCRIPT" ] || [ ! -f "$USB_GADGET_SERVICE" ]; then
+    echo "  WARNUNG: USB-Gadget-Skript oder -Service nicht gefunden."
+else
+    if [ ! -f "$BACKING_STORE" ]; then
+        echo "  Backing Store $BACKING_STORE fehlt, erstelle 4 GB FAT32-Image..."
+        dd if=/dev/zero of="$BACKING_STORE" bs=1M count=4096 status=progress
+        mkdosfs -F 32 "$BACKING_STORE"
+    fi
+
+    sudo cp "$USB_GADGET_SCRIPT" /usr/local/sbin/usb_gadget_setup.sh
+    sudo chmod +x /usr/local/sbin/usb_gadget_setup.sh
+    sudo cp "$USB_GADGET_SERVICE" /etc/systemd/system/usb-gadget.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable usb-gadget.service
+    sudo systemctl start usb-gadget.service
+    echo "  -> usb-gadget.service aktiviert."
+    echo ""
+    echo "  USB-Laufwerk:"
+    echo "  Nach dem Boot erscheint der SPL Meter als 'SPL Meter Storage' am PC."
+fi
 
 if [ "$I2S_MISSING" = true ]; then
     echo "WICHTIG: I2S-Konfiguration wurde geändert."
