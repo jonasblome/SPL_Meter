@@ -53,8 +53,18 @@ class AudioDeviceManager:
         self.latest_rms = 0.0
         self.latest_peak = 0.0
         
-        # Prepare filterbank in advance to only calculate once
-        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
+        # Prepare filterbanks for different band counts in advance
+        self.octave_center_freqs = list(helpers.frequency_weights_octave.keys())
+        self.available_band_counts = [4, 6, 8, 10, 12]
+        self.filterbanks = {}
+        for count in self.available_band_counts:
+            indices = self._select_band_indices(count)
+            selected_freqs = [self.octave_center_freqs[i] for i in indices]
+            self.filterbanks[count] = self.audio_processor.design_filterbank_for_frequencies(
+                selected_freqs, self.sample_rate
+            )
+        self.band_count = 12
+        self.filterbank = self.filterbanks[self.band_count]
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
 
@@ -258,6 +268,39 @@ class AudioDeviceManager:
             return num_channels
         finally:
             audio.terminate()
+
+    def _select_band_indices(self, count):
+        """Select a subset of octave band indices for the requested count."""
+        total = len(self.octave_center_freqs)
+        if count >= total:
+            return list(range(total))
+        # Distribute selected bands across the available range, emphasizing
+        # the mid-frequency range which is most relevant for SPL measurement.
+        predefined = {
+            4: [4, 6, 7, 9],
+            6: [3, 4, 5, 6, 7, 9],
+            8: [2, 3, 4, 5, 6, 7, 8, 9],
+            10: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        }
+        return predefined.get(count, list(range(total)))
+
+    def set_band_count(self, count):
+        """Change the number of filterband bars shown in the UI."""
+        count = int(count)
+        if count not in self.available_band_counts:
+            print(f"Invalid band count {count}, keeping {self.band_count}")
+            return
+        if count == self.band_count:
+            return
+        self.band_count = count
+        self.filterbank = self.filterbanks[count]
+        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
+        print(f"Filterband count set to {count}")
+
+    def get_band_frequencies(self):
+        """Return the center frequencies for the currently selected bands."""
+        indices = self._select_band_indices(self.band_count)
+        return [self.octave_center_freqs[i] for i in indices]
 
     def set_device_index(self, index):
         """Set the audio device index to use for recording"""
