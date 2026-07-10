@@ -23,6 +23,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
         .status.stopped { color: #f44336; }
+        .framerate { font-size: 14px; color: #666; margin: 4px 0; }
         .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px; margin-top: 24px; }
         .metric-box { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .metric-label { font-size: 13px; color: #666; margin-bottom: 8px; }
@@ -79,6 +80,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     </div>
     <hr>
     <div class="status stopped" id="status">Status: Stopped</div>
+    <div class="framerate" id="framerate">Target: 50 FPS | Actual: -- FPS</div>
     <hr>
     <div class="metrics">
         <div class="metric-box"><div class="metric-label">A-Weighted</div><div class="metric-value" id="a-weighted">-- dB</div></div>
@@ -100,6 +102,19 @@ HTML_PAGE_TAIL = """
     </div>
     <script>
         let evtSource = null;
+        const TARGET_FPS = 50;
+        let fpsHistory = [];
+
+        function updateFramerate() {
+            const now = performance.now();
+            fpsHistory.push(now);
+            // Keep only timestamps from the last second
+            const cutoff = now - 1000;
+            fpsHistory = fpsHistory.filter(t => t >= cutoff);
+            const actualFps = fpsHistory.length;
+            document.getElementById('framerate').textContent =
+                `Target: ${TARGET_FPS} FPS | Actual: ${actualFps} FPS`;
+        }
 
         function startMeasurement() {
             fetch('/start', {method: 'POST'}).then(() => {
@@ -119,6 +134,8 @@ HTML_PAGE_TAIL = """
                 const s = document.getElementById('status');
                 s.textContent = 'Status: Stopped';
                 s.className = 'status stopped';
+                document.getElementById('framerate').textContent = 'Target: ' + TARGET_FPS + ' FPS | Actual: -- FPS';
+                fpsHistory = [];
                 if (evtSource) { evtSource.close(); evtSource = null; }
             });
         }
@@ -165,6 +182,7 @@ HTML_PAGE_TAIL = """
             if (evtSource) evtSource.close();
             evtSource = new EventSource('/stream');
             evtSource.onmessage = function(e) {
+                updateFramerate();
                 const d = JSON.parse(e.data);
                 document.getElementById('a-weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
