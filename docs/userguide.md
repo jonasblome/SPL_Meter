@@ -230,6 +230,7 @@ Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balk
 - Der Pi Zero hat zwei Micro-USB-Anschlüsse: **PWR IN** (nur Strom) und **USB** (Daten + Strom). Für den Mass-Storage-Modus zuerst Strom anschließen, booten lassen und dann das Datenkabel an den USB-Port stecken.
 - Für stabile Datenverbindungen ein **Charge & Sync**-Kabel verwenden, kein reines Ladekabel.
 - Bei Problemen mit der WLAN-Verbindung die IP-Adresse im Router prüfen oder `sudo systemctl status spl-meter.service` auf dem Pi ausführen.
+- **Speicherlimit für Aufnahmen:** Das SPL Meter löscht automatisch die ältesten WAV-Dateien, sobald das gesamte Aufnahmevolumen 1,6 GB überschreitet. Wichtige Messungen sollten daher regelmäßig vom Pi oder USB-Laufwerk gesichert werden.
 
 ---
 
