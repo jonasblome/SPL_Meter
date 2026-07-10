@@ -90,10 +90,10 @@ Das SPL Meter kann Audiodaten während der Messung als WAV-Dateien speichern. Da
 
 ### Speicherort
 
-Aufgenommene WAV-Dateien werden im folgenden Ordner abgelegt:
+Während des Betriebs werden WAV-Dateien lokal auf dem Pi abgelegt:
 
 ```
-/mnt/usb_share/recordings
+/home/teamrapsberry/recordings_local
 ```
 
 Der Dateiname setzt sich aus dem aktuellen Datum und der Uhrzeit zusammen, z. B.:
@@ -102,21 +102,25 @@ Der Dateiname setzt sich aus dem aktuellen Datum und der Uhrzeit zusammen, z. B.
 2026-07-06_14-32-10.wav
 ```
 
+Beim nächsten Boot werden diese Dateien automatisch in den `recordings`-Ordner auf dem USB-Laufwerk kopiert, damit sie später am PC über „SPL Meter Storage" abgerufen werden können.
+
+> **Speicherlimit:** Damit der Speicher nicht überläuft, werden alte WAV-Dateien automatisch gelöscht, sobald das gesamte Aufnahmevolumen 1,6 GB überschreitet. Es werden immer die ältesten Dateien zuerst entfernt.
+
 ### Aufnahmen ansehen
 
 Per SSH auf dem Pi:
 
 ```bash
-ls -la /mnt/usb_share/recordings
+ls -la /home/teamrapsberry/recordings_local
 ```
 
-Eine Datei anhören oder herunterladen:
+Eine Datei herunterladen:
 
 ```bash
-scp teamrapsberry@<IP-ADRESSE>:/mnt/usb_share/recordings/2026-07-06_14-32-10.wav .
+scp teamrapsberry@<IP-ADRESSE>:/home/teamrapsberry/recordings_local/2026-07-06_14-32-10.wav .
 ```
 
-Oder über die Weboberfläche des Mass-Storage-Gadgets: Wenn der Pi als USB-Laufwerk erkannt wird, findest du die Aufnahmen auf dem freigegebenen Speicher unter dem Ordner `recordings`.
+Oder über das USB-Laufwerk: Nach einem Reboot findest du die bisherigen Aufnahmen auf „SPL Meter Storage" im Ordner `recordings`.
 
 > **Achtung:** Das USB-Laufwerk wird erst korrekt erkannt, wenn der Pi vollständig gebootet ist. Zuerst Strom anschließen, warten und erst dann das Daten-USB-Kabel mit dem PC verbinden.
 
@@ -128,7 +132,27 @@ Das SPL Meter wird über eine **Web-UI** gesteuert. Die Flask-Weboberfläche lä
 
 ### Starten des Dienstes
 
-Nach der Einrichtung mit `setup.sh` startet das SPL Meter automatisch als Systemdienst:
+Nach der Einrichtung mit `setup.sh` startet das SPL Meter **automatisch beim Boot** als Systemdienst. Du musst es also **nicht selbst starten**, sobald der Pi läuft.
+
+Im Normalfall reicht es, die IP-Adresse des Pi zu ermitteln und die Web-UI im Browser zu öffnen:
+
+```
+http://<IP-ADRESSE-DES-PI>:8501
+```
+
+Beispiel:
+
+```
+http://192.168.178.67:8501
+```
+
+Wenn du über Tailscale verbunden bist, funktioniert auch:
+
+```
+http://teamrapsberrypizero2-1.taild07c04.ts.net:8501
+```
+
+Falls nötig, kann der Dienst manuell gesteuert werden:
 
 ```bash
 sudo systemctl start  spl-meter.service
@@ -136,7 +160,7 @@ sudo systemctl stop   spl-meter.service
 sudo systemctl status spl-meter.service
 ```
 
-Manuell starten:
+Oder manuell aus dem Projektverzeichnis starten (nur für Tests oder Entwicklung):
 
 ```bash
 cd ~/SPL_Meter
@@ -161,20 +185,6 @@ python3 src/main.py --simulate /home/teamrapsberry/testsignal.wav
 
 > **Hinweis:** Die Klasse `CommandLineController` in `@c:\Users\Lars\Documents\GitHub\SPL_Meter\src\CommandLineController.py` ist aktuell nur ein Platzhalter und stellt keine weiteren Befehle zur Verfügung. Alle Steuerung erfolgt über die Web-UI oder den systemd-Dienst.
 
-### Aufruf der Web-UI
-
-Sobald der Dienst läuft, ist die Oberfläche unter folgender Adresse erreichbar:
-
-```
-http://<IP-ADRESSE-DES-PI>:8501
-```
-
-Wenn du über Tailscale verbunden bist, funktioniert auch:
-
-```
-http://teamrapsberrypizero2-1.taild07c04.ts.net:8501
-```
-
 ### Funktionen der Web-UI
 
 Die Oberfläche zeigt folgende Bereiche an:
@@ -184,7 +194,7 @@ Die Oberfläche zeigt folgende Bereiche an:
 | **Start / Stop Measurement** | Mikrofonaufnahme starten oder stoppen |
 | **Leq Duration** | Messdauer für eine Leq-Messung auswählen (5 s, 10 s, 15 s, 30 s, 60 s, 300 s) |
 | **Start Leq** | Eine integrierte Leq-Messung über die gewählte Dauer starten |
-| **Store Audio** | Aktiviert die Speicherung der Aufnahme als WAV-Datei unter `/mnt/usb_share/recordings` |
+| **Store Audio** | Aktiviert die Speicherung der Aufnahme als WAV-Datei unter `/home/teamrapsberry/recordings_local` |
 | **Calibration** | Mikrofon mit einem bekannten Schalldruckpegel (z. B. 94 dB) kalibrieren |
 
 ### Angezeigte Messwerte
@@ -203,13 +213,15 @@ Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balk
 
 ### Ablauf einer typischen Messung
 
-1. Pi einschalten und sicherstellen, dass er mit dem Netzwerk verbunden ist.
-2. Web-UI im Browser öffnen.
+1. Pi einschalten und warten, bis er mit dem Netzwerk verbunden ist.
+2. IP-Adresse des Pi ermitteln und die Web-UI im Browser öffnen: `http://<IP-ADRESSE>:8501`.
+   > Der Dienst startet automatisch – es ist kein manuelles Starten nötig.
 3. Auf **„Start Measurement“** klicken.
 4. Optional: **„Store Audio“** aktivieren, um die Aufnahme zu speichern.
 5. Optional: **„Leq Duration“** wählen und **„Start Leq“** klicken.
 6. Nach der Messung auf **„Stop Measurement“** klicken.
-7. Aufgenommene WAV-Dateien liegen unter `/mnt/usb_share/recordings`.
+7. Aufgenommene WAV-Dateien liegen zunächst unter `/home/teamrapsberry/recordings_local`.
+8. Nach einem Reboot erscheinen die Aufnahmen automatisch auf dem USB-Laufwerk unter `recordings/`.
 
 ---
 

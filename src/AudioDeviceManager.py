@@ -6,6 +6,7 @@ Simple I2S microphone reader for Raspberry Pi Zero W
 
 import os
 import time
+import glob
 import numpy as np
 
 os.environ.setdefault("JACK_NO_AUDIO_RESERVATION", "1")
@@ -71,6 +72,10 @@ class AudioDeviceManager:
         self.recording_data_blocks = []
         self.recordings_dir = "/home/teamrapsberry/recordings_local"
         os.makedirs(self.recordings_dir, exist_ok=True)
+
+        # Maximum total size for stored recordings: 1.6 GB
+        self.max_recordings_size_bytes = int(1.6 * 1024 * 1024 * 1024)
+
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -207,6 +212,30 @@ class AudioDeviceManager:
         print(f"Storing recorded audio to file: {file_name}")
         all_recording_data = np.concatenate(self.recording_data_blocks).ravel()
         wf.write(file_name, self.sample_rate, all_recording_data)
+        self._cleanup_old_recordings()
+
+    def _cleanup_old_recordings(self):
+        """Delete oldest recordings if total size exceeds 1.6 GB."""
+        wav_files = glob.glob(os.path.join(self.recordings_dir, "*.wav"))
+        if not wav_files:
+            return
+
+        total_size = sum(os.path.getsize(f) for f in wav_files)
+        if total_size <= self.max_recordings_size_bytes:
+            return
+
+        # Sort by modification time, oldest first
+        wav_files.sort(key=lambda f: os.path.getmtime(f))
+
+        while wav_files and total_size > self.max_recordings_size_bytes:
+            oldest = wav_files.pop(0)
+            try:
+                file_size = os.path.getsize(oldest)
+                os.remove(oldest)
+                total_size -= file_size
+                print(f"Deleted old recording to free space: {oldest}")
+            except OSError as e:
+                print(f"Failed to delete old recording {oldest}: {e}")
 
     def list_devices(self):
         """List available audio devices"""
