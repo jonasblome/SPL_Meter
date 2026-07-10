@@ -1,7 +1,5 @@
 numpy==2.2.4
 pyaudio>=0.2.11
 flask>=3.0.0
-flask-socketio>=5.0.0
-simple-websocket>=0.5
 scipy>=1.13.0
 pytest>=9.1.1

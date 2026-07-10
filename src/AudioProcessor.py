@@ -164,34 +164,29 @@ class AudioProcessor:
         return self.slow_state
     
     def design_a_weighting_filterbank(self, sample_rate, is_octave=True):
+        octave_ratio = 10**(3/10) if is_octave else 10**(1/10)
         frequency_weights = helpers.frequency_weights_octave if is_octave else helpers.frequency_weights_3rd_octave
-        center_freqs = list(frequency_weights.keys())
-        return self.design_filterbank_for_frequencies(center_freqs, sample_rate)
+        band_lower_freqs = np.array(list(frequency_weights.keys())) * octave_ratio**(-1/2)
+        band_upper_freqs = np.array(list(frequency_weights.keys())) * octave_ratio**(1/2)
 
-    def design_filterbank_for_frequencies(self, center_freqs, sample_rate, order=6):
-        """Design a bandpass filterbank for the given center frequencies."""
-        octave_ratio = 10**(3/10)
-        band_lower_freqs = np.array(center_freqs) * octave_ratio**(-1/2)
-        band_upper_freqs = np.array(center_freqs) * octave_ratio**(1/2)
-
+        # nyquist_freq = sample_rate / 2 - 1
+        # band_upper_freqs = np.minimum(band_upper_freqs, nyquist_freq)
         for lower_freq, upper_freq in zip(band_lower_freqs, band_upper_freqs):
             if upper_freq >= sample_rate / 2:
-                raise ValueError(f"Sample rate {sample_rate} Hz is too low for the designed filterbank. Please use a higher sample rate.")
-            if lower_freq <= 0:
-                raise ValueError(f"Band lower frequency must be > 0, got {lower_freq}")
+                raise ValueError(f"Sample rate {sample_rate} Hz is too low for the designed A-weighting filterbank. Please use a higher sample rate.")
 
-        filterbank = []
+        a_weighting_filterbank = []
         for lower_freq, upper_freq in zip(band_lower_freqs, band_upper_freqs):
             sos_sections = signal.butter(
-                order,
+                10,
                 [lower_freq, upper_freq],
                 btype='bandpass',
                 fs=sample_rate,
                 output='sos'
             )
-            filterbank.append(sos_sections)
-
-        return filterbank
+            a_weighting_filterbank.append(sos_sections)
+        
+        return a_weighting_filterbank
     
     def apply_filterbank(self, audio_data, filterbank):
         filtered_signals = []

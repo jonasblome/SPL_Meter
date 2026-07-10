@@ -7,7 +7,6 @@ Simple I2S microphone reader for Raspberry Pi Zero W
 import os
 import time
 import glob
-import helpers
 import numpy as np
 
 os.environ.setdefault("JACK_NO_AUDIO_RESERVATION", "1")
@@ -54,18 +53,9 @@ class AudioDeviceManager:
         self.latest_rms = 0.0
         self.latest_peak = 0.0
         
-        # Prepare filterbanks for different band counts in advance
-        self.octave_center_freqs = list(helpers.frequency_weights_octave.keys())
-        self.available_band_counts = [4, 6, 8, 10, 12]
-        self.filterbanks = {}
-        for count in self.available_band_counts:
-            indices = self._select_band_indices(count)
-            selected_freqs = [self.octave_center_freqs[i] for i in indices]
-            self.filterbanks[count] = self.audio_processor.design_filterbank_for_frequencies(
-                selected_freqs, self.sample_rate
-            )
-        self.band_count = 12
-        self.filterbank = self.filterbanks[self.band_count]
+        # Prepare filterbank in advance to only calculate once
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
+        self.num_bands = min(10, len(self.filterbank))
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
 
@@ -115,8 +105,9 @@ class AudioDeviceManager:
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
 
-        # Compute filterband levels and A-weighting
-        filtered_signals = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
+        # Compute filterband levels and A-weighting (only active number of bands)
+        active_filterbank = self.filterbank[:self.num_bands]
+        filtered_signals = self.audio_processor.apply_filterbank(audio_float, active_filterbank)
         self.latest_filterband_spl_db = [
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
@@ -270,43 +261,18 @@ class AudioDeviceManager:
         finally:
             audio.terminate()
 
-    def _select_band_indices(self, count):
-        """Select a subset of octave band indices for the requested count."""
-        total = len(self.octave_center_freqs)
-        if count >= total:
-            return list(range(total))
-        # Distribute selected bands across the available range, emphasizing
-        # the mid-frequency range which is most relevant for SPL measurement.
-        predefined = {
-            4: [3, 5, 6, 8],
-            6: [2, 3, 4, 5, 6, 8],
-            8: [1, 2, 3, 4, 5, 6, 7, 8],
-            10: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        }
-        return predefined.get(count, list(range(total)))
-
-    def set_band_count(self, count):
-        """Change the number of filterband bars shown in the UI."""
-        count = int(count)
-        if count not in self.available_band_counts:
-            print(f"Invalid band count {count}, keeping {self.band_count}")
-            return
-        if count == self.band_count:
-            return
-        self.band_count = count
-        self.filterbank = self.filterbanks[count]
-        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
-        print(f"Filterband count set to {count}")
-
-    def get_band_frequencies(self):
-        """Return the center frequencies for the currently selected bands."""
-        indices = self._select_band_indices(self.band_count)
-        return [self.octave_center_freqs[i] for i in indices]
-
     def set_device_index(self, index):
         """Set the audio device index to use for recording"""
         self.device_index = index
         self.num_channels = self.get_num_channels_of_current_device()
+
+    def set_num_bands(self, num_bands):
+        """Set the number of filterbank bands to compute and display."""
+        num_bands = int(num_bands)
+        if num_bands < 1 or num_bands > len(self.filterbank):
+            raise ValueError(f"num_bands must be between 1 and {len(self.filterbank)}")
+        self.num_bands = num_bands
+        return self.num_bands
     
     def generate_noise(self, num_samples=48000):
         noise = np.random.normal(0, 1, num_samples)
