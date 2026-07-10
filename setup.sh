@@ -139,6 +139,28 @@ else
         mkdosfs -F 32 "$BACKING_STORE"
     fi
 
+    # wifi_config.json-Vorlage auf das Laufwerk kopieren, falls noch nicht vorhanden
+    WIFI_TEMPLATE="$PROJECT_DIR/usb_share/wifi_config.json"
+    if [ -f "$WIFI_TEMPLATE" ]; then
+        TEMP_MOUNT="/tmp/usb_gadget_bootstrap"
+        mkdir -p "$TEMP_MOUNT"
+        LOOP_DEV=$(losetup --show -fP "$BACKING_STORE")
+        if mount -t vfat "${LOOP_DEV}" "$TEMP_MOUNT" 2>/dev/null || \
+           mount -t vfat "${LOOP_DEV}p1" "$TEMP_MOUNT" 2>/dev/null; then
+            if [ ! -f "$TEMP_MOUNT/wifi_config.json" ]; then
+                cp "$WIFI_TEMPLATE" "$TEMP_MOUNT/wifi_config.json"
+                echo "  -> wifi_config.json-Vorlage auf USB-Laufwerk kopiert."
+            else
+                echo "  -> wifi_config.json bereits auf USB-Laufwerk vorhanden."
+            fi
+            umount "$TEMP_MOUNT" 2>/dev/null || true
+        else
+            echo "  WARNUNG: Backing Store konnte nicht gemountet werden."
+        fi
+        losetup -d "$LOOP_DEV" 2>/dev/null || true
+        rmdir "$TEMP_MOUNT" 2>/dev/null || true
+    fi
+
     sudo cp "$USB_GADGET_SCRIPT" /usr/local/sbin/usb_gadget_setup.sh
     sudo chmod +x /usr/local/sbin/usb_gadget_setup.sh
     sudo cp "$USB_GADGET_SERVICE" /etc/systemd/system/usb-gadget.service
