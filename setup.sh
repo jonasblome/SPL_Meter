@@ -164,13 +164,28 @@ else
     sudo cp "$USB_GADGET_SCRIPT" /usr/local/sbin/usb_gadget_setup.sh
     sudo chmod +x /usr/local/sbin/usb_gadget_setup.sh
     sudo cp "$USB_GADGET_SERVICE" /etc/systemd/system/usb-gadget.service
+
+    # Sync-Service installieren: Kopiert lokale Aufnahmen auf den USB-Share,
+    # bevor das Gadget aktiv wird.
+    SYNC_SCRIPT="$PROJECT_DIR/sync_recordings.sh"
+    SYNC_SERVICE="$PROJECT_DIR/sync-recordings.service"
+    if [ -f "$SYNC_SCRIPT" ] && [ -f "$SYNC_SERVICE" ]; then
+        sudo cp "$SYNC_SCRIPT" /usr/local/sbin/sync_recordings.sh
+        sudo chmod +x /usr/local/sbin/sync_recordings.sh
+        sudo cp "$SYNC_SERVICE" /etc/systemd/system/sync-recordings.service
+    fi
+
     sudo systemctl daemon-reload
+    sudo systemctl enable sync-recordings.service
     sudo systemctl enable usb-gadget.service
+    sudo systemctl start sync-recordings.service
     sudo systemctl start usb-gadget.service
-    echo "  -> usb-gadget.service aktiviert."
+    echo "  -> sync-recordings.service und usb-gadget.service aktiviert."
     echo ""
     echo "  USB-Laufwerk:"
     echo "  Nach dem Boot erscheint der SPL Meter als 'SPL Meter Storage' am PC."
+    echo "  Aufnahmen aus /home/teamrapsberry/recordings_local werden vorher"
+    echo "  in den recordings-Ordner des USB-Laufwerks kopiert."
 fi
 
 if [ "$I2S_MISSING" = true ]; then

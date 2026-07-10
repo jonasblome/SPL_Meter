@@ -42,55 +42,6 @@ Das SPL Meter liest beim Boot automatisch eine Datei namens **`wifi_config.json`
 
 Beim nächsten Boot liest der `wifi-connect`-Service die Datei aus und konfiguriert das WLAN automatisch. Es ist kein weiterer Eingriff nötig.
 
-**Log prüfen (per SSH):**
-
-```bash
-sudo journalctl -u wifi-connect.service
-```
-
----
-
-### Variante B: Vor dem ersten Boot (bei frischer SD-Karte)
-
-Diese Variante funktioniert nur bei einer frischen SD-Karte oder vor dem Einschalten des Pi.
-
-1. SD-Karte in den Computer einlegen.
-2. Die Partition **`boot`** öffnet sich im Explorer.
-3. Eine Datei mit dem Namen **`wpa_supplicant.conf`** im Stammverzeichnis der `boot`-Partition anlegen.
-4. Folgenden Inhalt einfügen und WLAN-Name sowie Passwort anpassen:
-
-```
-country=DE
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-update_config=1
-
-network={
-    ssid="EUER_WLAN_NAME"
-    psk="EUER_WLAN_PASSWORT"
-}
-```
-
-5. Eine **leere Datei** mit dem Namen **`ssh`** (ohne Dateiendung!) anlegen. Das aktiviert den SSH-Server beim Boot.
-6. SD-Karte in den Pi einsetzen und Strom anschließen.
-7. Nach ca. 30–60 Sekunden bootet der Pi und verbindet sich mit dem WLAN.
-
-### Variante C: Über SSH (Pi ist bereits erreichbar)
-
-Wenn du bereits eine Verbindung zum Pi hast, kannst du das WLAN auch nachträglich konfigurieren:
-
-```bash
-sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
-```
-
-Dort den gewünschten `network`-Block einfügen, speichern (`Strg+O`, `Enter`) und beenden (`Strg+X`). Anschließend neu verbinden:
-
-```bash
-sudo wpa_cli -i wlan0 reconfigure
-```
-
-> **Hinweis:** Wenn der Pi über Tailscale erreichbar sein soll, muss nach der WLAN-Verbindung Tailscale einmalig eingerichtet werden (siehe Kapitel 3).
-
----
 
 ## 2. SSH-Verbindung herstellen
 
@@ -132,15 +83,6 @@ ssh teamrapsberry@teamrapsberrypizero2-1.taild07c04.ts.net
 
 > Der aktuelle Tailscale-Hostname und Status sind im Tailscale-Admin-Panel unter [https://login.tailscale.com/admin/machines](https://login.tailscale.com/admin/machines) ersichtlich.
 
-### Verbindung über VS Code Remote-SSH
-
-Detaillierte Schritte für VS Code mit Tailscale findest du in der Datei:
-
-- `@c:\Users\Lars\Documents\GitHub\SPL_Meter\docs\connecting_to_raspberry_pi_zero.md`
-
-Darin ist erklärt, wie du die SSH-Config, die Remote-SSH-Erweiterung und die Verbindung in VS Code einrichtest.
-
----
 
 ## 3. Audioaufnahmen auf dem Pi ansehen
 

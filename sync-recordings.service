@@ -1,0 +1,13 @@
+[Unit]
+Description=Sync local recordings to USB backing store
+After=local-fs.target
+Before=usb-gadget.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sync_recordings.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -69,7 +69,7 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
-        self.recordings_dir = "/mnt/usb_share/recordings"
+        self.recordings_dir = "/home/teamrapsberry/recordings_local"
         os.makedirs(self.recordings_dir, exist_ok=True)
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
