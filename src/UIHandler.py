@@ -39,7 +39,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             line-height: 1.2;
         }
         .filterband-bar-container { display: flex; flex-direction: column-reverse; width: 30px; height: 150px; background: #f0f2f6; border-radius: 4px; border: 1px solid #e1e4e8; }
-        .filterband-bar-fill { background: #ff4b4b; border-radius: 0 0 4px 4px; width: 100%; transition: height 0.2s; }
+        .filterband-bar-fill { background: #ff4b4b; border-radius: 0 0 4px 4px; width: 100%; transition: height 0.05s linear; will-change: height; }
         .filterband-freq { font-size: 12px; color: #666; margin-top: 4px; }
         hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
     </style>
@@ -347,7 +347,7 @@ class UIHandler:
                         "leq_is_running":     device_manager.audio_processor.leq_is_running,
                     })
                     yield f"data: {payload}\n\n"
-                    time.sleep(0.05)  # 20 Hz update rate
+                    time.sleep(0.02)  # 50 Hz update rate for smoother UI
             return Response(event_generator(), mimetype="text/event-stream")
 
     def _start_recording_thread(self):
