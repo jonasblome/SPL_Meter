@@ -120,6 +120,19 @@ BACKING_STORE="/home/teamrapsberry/backing_store.img"
 if [ ! -f "$USB_GADGET_SCRIPT" ] || [ ! -f "$USB_GADGET_SERVICE" ]; then
     echo "  WARNUNG: USB-Gadget-Skript oder -Service nicht gefunden."
 else
+    # Konfliktierende Raspberry-Pi-USB-Gadget-Services deaktivieren
+    for CONFLICT_SERVICE in rpi-usb-gadget.service rpi-usb-gadget-ics.service; do
+        if systemctl list-unit-files "$CONFLICT_SERVICE" &>/dev/null; then
+            echo "  -> Deaktiviere konfliktierenden Service: $CONFLICT_SERVICE"
+            sudo systemctl disable "$CONFLICT_SERVICE" 2>/dev/null || true
+            sudo systemctl mask "$CONFLICT_SERVICE" 2>/dev/null || true
+        fi
+    done
+
+    # Sicherstellen, dass nur dwc2 automatisch geladen wird
+    sudo mkdir -p /etc/modules-load.d
+    echo "dwc2" | sudo tee /etc/modules-load.d/usb-gadget.conf > /dev/null
+
     if [ ! -f "$BACKING_STORE" ]; then
         echo "  Backing Store $BACKING_STORE fehlt, erstelle 4 GB FAT32-Image..."
         dd if=/dev/zero of="$BACKING_STORE" bs=1M count=4096 status=progress
