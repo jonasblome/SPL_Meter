@@ -8,7 +8,49 @@ Diese Anleitung beschreibt, wie das SPL Meter auf dem Raspberry Pi Zero betriebe
 
 Das SPL Meter benötigt eine Netzwerkverbindung, damit du per SSH oder über die Web-UI darauf zugreifen kannst. Es gibt zwei Möglichkeiten, das WLAN einzurichten.
 
-### Variante A: Vor dem ersten Boot ( empfohlen )
+### Variante A: Über das USB-Laufwerk ( empfohlen )
+
+Das SPL Meter liest beim Boot automatisch eine Datei namens **`wifi_config.json`** vom USB-Laufwerk (dem „SPL Meter Storage"-Laufwerk, das am PC erscheint). So können WLAN-Zugangsdaten für mehrere Netzwerke hinterlegt werden, ohne SSH-Zugang zu benötigen.
+
+**Schritt 1 – Datei anlegen oder bearbeiten:**
+
+1. USB-Datenkabel an den Pi anschließen und warten bis das Laufwerk „SPL Meter Storage" im Explorer erscheint.
+2. Im Stammverzeichnis des Laufwerks eine Datei namens **`wifi_config.json`** anlegen (falls noch nicht vorhanden).
+3. Folgenden Inhalt einfügen und die SSIDs sowie Passwörter anpassen:
+
+```json
+{
+    "networks": [
+        {
+            "ssid": "Heimnetz",
+            "password": "mein_passwort"
+        },
+        {
+            "ssid": "Buero_WLAN",
+            "password": "buero_passwort"
+        }
+    ],
+    "country": "DE"
+}
+```
+
+> **Mehrere Netzwerke:** Es können beliebig viele `network`-Einträge angegeben werden. Der Pi verbindet sich automatisch mit dem stärksten verfügbaren Netzwerk aus der Liste.
+
+> **Offenes Netzwerk (kein Passwort):** Eintrag ohne `"password"`-Feld anlegen oder `"password": ""` setzen.
+
+**Schritt 2 – Pi neu starten:**
+
+Beim nächsten Boot liest der `wifi-connect`-Service die Datei aus und konfiguriert das WLAN automatisch. Es ist kein weiterer Eingriff nötig.
+
+**Log prüfen (per SSH):**
+
+```bash
+sudo journalctl -u wifi-connect.service
+```
+
+---
+
+### Variante B: Vor dem ersten Boot (bei frischer SD-Karte)
 
 Diese Variante funktioniert nur bei einer frischen SD-Karte oder vor dem Einschalten des Pi.
 
@@ -32,7 +74,7 @@ network={
 6. SD-Karte in den Pi einsetzen und Strom anschließen.
 7. Nach ca. 30–60 Sekunden bootet der Pi und verbindet sich mit dem WLAN.
 
-### Variante B: Über SSH (Pi ist bereits erreichbar)
+### Variante C: Über SSH (Pi ist bereits erreichbar)
 
 Wenn du bereits eine Verbindung zum Pi hast, kannst du das WLAN auch nachträglich konfigurieren:
 
@@ -159,6 +201,23 @@ cd ~/SPL_Meter
 source spl_meter_env/bin/activate
 python3 src/main.py
 ```
+
+### Kommandozeilenoptionen
+
+Das Skript `src/main.py` kennt derzeit nur einen optionalen Parameter:
+
+| Befehl | Bedeutung |
+|---|---|
+| `python3 src/main.py` | Startet das SPL Meter mit dem echten Mikrofon (I2S). |
+| `python3 src/main.py --simulate /pfad/zur/datei.wav` | Startet das SPL Meter im Simulationsmodus und liest die Audioausgabe aus einer WAV-Datei. |
+
+Beispiel für den Simulationsmodus:
+
+```bash
+python3 src/main.py --simulate /home/teamrapsberry/testsignal.wav
+```
+
+> **Hinweis:** Die Klasse `CommandLineController` in `@c:\Users\Lars\Documents\GitHub\SPL_Meter\src\CommandLineController.py` ist aktuell nur ein Platzhalter und stellt keine weiteren Befehle zur Verfügung. Alle Steuerung erfolgt über die Web-UI oder den systemd-Dienst.
 
 ### Aufruf der Web-UI
 

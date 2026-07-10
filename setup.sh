@@ -54,7 +54,7 @@ pip install --only-binary :all: -r requirements.txt
 
 # 5. systemd-Service für Autostart einrichten
 echo ""
-echo "[5/5] Richte Autostart-Service ein..."
+echo "[5/6] Richte Autostart-Service ein..."
 PROJECT_DIR="$(pwd)"
 PYTHON_BIN="$PROJECT_DIR/spl_meter_env/bin/python3"
 SERVICE_USER="${SUDO_USER:-$USER}"
@@ -68,6 +68,28 @@ sed -e "s|USER_PLACEHOLDER|$SERVICE_USER|g" \
 sudo systemctl daemon-reload
 sudo systemctl enable $SERVICE_FILE
 
+# 6. WLAN-Connect-Service einrichten (liest wifi_config.json vom USB-Share)
+echo ""
+echo "[6/6] Richte WLAN-Connect-Service ein..."
+WIFI_SCRIPT="$PROJECT_DIR/wifi_connect.sh"
+WIFI_SERVICE="$PROJECT_DIR/wifi-connect.service"
+
+if [ ! -f "$WIFI_SCRIPT" ]; then
+    echo "  WARNUNG: wifi_connect.sh nicht gefunden – WLAN-Service wird nicht eingerichtet."
+else
+    sudo cp "$WIFI_SCRIPT" /usr/local/sbin/wifi_connect.sh
+    sudo chmod +x /usr/local/sbin/wifi_connect.sh
+    sudo cp "$WIFI_SERVICE" /etc/systemd/system/wifi-connect.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable wifi-connect.service
+    echo "  -> wifi-connect.service aktiviert."
+    echo ""
+    echo "  WLAN-Konfiguration:"
+    echo "  Lege die Datei 'wifi_config.json' auf das USB-Laufwerk (SPL Meter Storage)."
+    echo "  Beim naechsten Boot liest der Pi die WLAN-Zugangsdaten automatisch aus dieser Datei."
+    echo "  Vorlage: $PROJECT_DIR/usb_share/wifi_config.json"
+fi
+
 echo ""
 echo "========================================"
 echo " Setup abgeschlossen!"
@@ -77,6 +99,10 @@ echo "Service verwalten:"
 echo "  sudo systemctl start  spl-meter.service"
 echo "  sudo systemctl stop   spl-meter.service"
 echo "  sudo systemctl status spl-meter.service"
+echo ""
+echo "WLAN-Service:"
+echo "  sudo systemctl status wifi-connect.service"
+echo "  sudo journalctl -u wifi-connect.service"
 echo ""
 echo "Manuell starten:"
 echo "  source spl_meter_env/bin/activate"
