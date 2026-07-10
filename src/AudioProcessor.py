@@ -135,12 +135,15 @@ class AudioProcessor:
         return new_state
     
     def process_time_weighting_block(self, audio_data, old_state, tau):
-        state = old_state
-
-        for sample in audio_data:
-            state = self.update_time_weighting_state(sample, state, tau)
-
-        return state
+        # Fully vectorized exponential moving average over the block.
+        # y[n] = a * y[n-1] + (1-a) * x[n]^2
+        # After N samples: y[N-1] = a^N * y[-1] + (1-a) * sum_i a^(N-1-i) * x[i]^2
+        a = self.compute_time_weighting_factor(tau)
+        audio_squared = audio_data ** 2
+        n = len(audio_squared)
+        weights = (1.0 - a) * (a ** np.arange(n - 1, -1, -1))
+        new_state = (a ** n) * old_state + np.dot(weights, audio_squared)
+        return new_state
     
     def compute_fast_state(self, audio_data):
         self.fast_state = self.process_time_weighting_block(
