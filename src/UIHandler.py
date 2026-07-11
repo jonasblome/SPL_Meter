@@ -84,8 +84,14 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     </div>
     <div class="weighting">
         <strong>Calibration:</strong>
+        <span>Reference</span>
         <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
         <span>dB</span>
+
+        <span>Threshold</span>
+        <input id="threshold-db" type="number" value="50" min="0" max="140" step="0.1">
+        <span>dB</span>
+
         <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
         <span id="calibration-status">Not calibrated</span>
     </div>
@@ -173,16 +179,26 @@ HTML_PAGE_TAIL = """
             const referenceDb = Number(
                 document.getElementById('reference-db').value
             );
+            const thresholdDb = Number(
+                document.getElementById('threshold-db').value
+            );
+
+            document.getElementById('calibration-status').textContent =
+                'Starting calibration...';
 
             fetch('/calibrate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({reference_db: referenceDb})
+                body: JSON.stringify({
+                    reference_db: referenceDb,
+                    threshold_db: thresholdDb
+                })
             })
             .then(response => response.json())
             .then(data => {
                 document.getElementById('calibration-status').textContent =
-                    'Offset: ' + data.offset_db.toFixed(2) + ' dB';
+                    data.message || data.error || 'Calibration started';
+                startSSE();
             });
         }
         function setStoreAudio(checked) {
@@ -227,6 +243,16 @@ HTML_PAGE_TAIL = """
                     document.getElementById('leq').textContent = 'running...';
                 } else if (d.leq_db !== null) {
                     document.getElementById('leq').textContent = d.leq_db.toFixed(2) + ' dB';
+                }
+                if (d.calibration) {
+                    let calibrationText = d.calibration.status;
+
+                    if (d.calibration.active) {
+                        calibrationText +=
+                            ' | 1 kHz: ' + d.calibration.band_spl_db.toFixed(2) + ' dB';
+                    }
+
+                    document.getElementById('calibration-status').textContent = calibrationText;
                 }
                 if (d.filterband_spl_db) {
                     d.filterband_spl_db.forEach((spl, i) => {
@@ -370,8 +396,9 @@ class UIHandler:
 
             data = request.get_json() or {}
             reference_db = float(data.get("reference_db", 94.0))
+            threshold_db = float(data.get("threshold_db", 50.0))
 
-            result = device_manager.calibrate_microphone(reference_db)
+            result = device_manager.calibrate_microphone(reference_db, threshold_db)
             return jsonify(result)
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
@@ -404,6 +431,15 @@ class UIHandler:
                         "leq_db":             device_manager.latest_leq_db,
                         "leq_is_complete":    device_manager.latest_leq_is_complete,
                         "leq_is_running":     device_manager.audio_processor.leq_is_running,
+                        "calibration": {
+                        "active": device_manager.is_calibrating,
+                        "status": device_manager.calibration_status,
+                        "reference_db": device_manager.calibration_reference_db,
+                        "threshold_db": device_manager.calibration_threshold_db,
+                        "band_spl_db": device_manager.latest_calibration_band_spl_db,
+                        "measured_db": device_manager.calibration_measured_db,
+                        "offset_db": device_manager.calibration_offset_db,
+                    },
                     })
                     yield f"data: {payload}\n\n"
                     time.sleep(0.0167)  # ~60 Hz update rate

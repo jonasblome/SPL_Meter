@@ -8,6 +8,7 @@ import os
 import time
 import glob
 import numpy as np
+import helpers
 
 os.environ.setdefault("JACK_NO_AUDIO_RESERVATION", "1")
 os.environ.setdefault("JACK_NO_START_SERVER", "1")
@@ -58,7 +59,27 @@ class AudioDeviceManager:
         self.num_bands = min(10, len(self.filterbank))
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
+       
+        # Calibration state 1000 Hz s octave band。
+        self.octave_center_freqs = list(helpers.frequency_weights_octave.keys())
+        self.calibration_band_index = min(
+            range(len(self.octave_center_freqs)),
+            key=lambda i: abs(float(self.octave_center_freqs[i]) - 1000.0)
+        )
 
+        self.is_calibrating = False
+        self.calibration_status = "Not calibrated"
+        self.calibration_reference_db = 94.0
+        self.calibration_threshold_db = 50.0
+        self.calibration_timeout_s = 5.0
+        self.calibration_duration_s = 1.0
+
+        self.calibration_started_at = None
+        self.calibration_measurement_started = False
+        self.calibration_power_sum = 0.0
+        self.calibration_sample_count = 0
+        self.calibration_measured_db = None
+        self.latest_calibration_band_spl_db = 0.0
         # Time weighting
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
@@ -94,7 +115,9 @@ class AudioDeviceManager:
         # causing fixed-duration Leq measurements to finish too early.
         if self.num_channels > 1:
             audio_float = audio_float.reshape(-1, self.num_channels).mean(axis=1)
-
+        
+        # Process microphone calibration if active
+        self._process_microphone_calibration(audio_float)
         # Store to audio file
         if self.should_store_recording:
             self.store_recording(audio_float)
@@ -133,16 +156,85 @@ class AudioDeviceManager:
         #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
         
         return (in_data, pyaudio.paContinue)
-    
-    def calibrate_microphone(self, reference_db):
-        """Calculate calibration offset from the current detected SPL."""
-        self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db
+    # wait 5s to start 
+    def calibrate_microphone(self, reference_db=94.0, threshold_db=50.0):
+        """Start microphone calibration using the 1 kHz octave band."""
+        self.calibration_reference_db = float(reference_db)
+        self.calibration_threshold_db = float(threshold_db)
+
+        self.is_calibrating = True
+        self.calibration_status = (
+            f"Waiting for 1 kHz signal above {self.calibration_threshold_db:.1f} dB..."
+        )
+
+        self.calibration_started_at = time.time()
+        self.calibration_measurement_started = False
+        self.calibration_power_sum = 0.0
+        self.calibration_sample_count = 0
+        self.calibration_measured_db = None
+        self.latest_calibration_band_spl_db = 0.0
 
         return {
-            "reference_db": float(reference_db),
-            "measured_db": self.latest_raw_spl_db,
-            "offset_db": self.calibration_offset_db,
+            "status": "started",
+            "message": self.calibration_status,
+            "reference_db": self.calibration_reference_db,
+            "threshold_db": self.calibration_threshold_db,
         }
+    
+    def _process_microphone_calibration(self, audio_float):
+        """Process calibration using the 1 kHz octave band."""
+        if not self.is_calibrating:
+            return
+
+        now = time.time()
+
+        sos_1khz = self.filterbank[self.calibration_band_index]
+        filtered_1khz, band_spl_db = self.audio_processor.compute_filtered_band_spl_db(
+            audio_float,
+            sos_1khz
+        )
+
+        self.latest_calibration_band_spl_db = float(band_spl_db)
+
+        # Step 1: wait for 1 kHz signal above threshold
+        if not self.calibration_measurement_started:
+            if band_spl_db >= self.calibration_threshold_db:
+                self.calibration_measurement_started = True
+                self.calibration_power_sum = 0.0
+                self.calibration_sample_count = 0
+                self.calibration_status = "1 kHz signal detected. Measuring for 1 second..."
+            elif now - self.calibration_started_at >= self.calibration_timeout_s:
+                self.is_calibrating = False
+                self.calibration_status = "Calibration failed: no 1 kHz signal detected."
+                return
+            else:
+                return
+
+        # Step 2: collect exactly 1 second of filtered 1 kHz signal
+        required_samples = int(self.sample_rate * self.calibration_duration_s)
+        remaining_samples = required_samples - self.calibration_sample_count
+
+        block = filtered_1khz[:remaining_samples]
+
+        self.calibration_power_sum += float(
+            np.sum(block.astype(np.float64) ** 2)
+        )
+        self.calibration_sample_count += len(block)
+
+        # Step 3: finish calibration
+        if self.calibration_sample_count >= required_samples:
+            mean_square = self.calibration_power_sum / max(1, self.calibration_sample_count)
+            measured_db = self.audio_processor.mean_square_to_spl_db(mean_square)
+
+            self.calibration_measured_db = float(measured_db)
+            self.calibration_offset_db = float(self.calibration_reference_db - measured_db)
+
+            self.is_calibrating = False
+            self.calibration_status = (
+                f"Calibration complete. "
+                f"Measured: {measured_db:.2f} dB, "
+                f"Offset: {self.calibration_offset_db:.2f} dB"
+            )
 
     def start_recording(self):
         """Start recording from the microphone"""

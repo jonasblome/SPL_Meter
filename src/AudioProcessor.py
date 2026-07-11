@@ -120,8 +120,21 @@ class AudioProcessor:
 
         # mute cant return-inf，UI 
         return float(max(-120.0, level_db))
-    
-    #Zeitbewertung in fast and slow
+    def compute_filtered_band_spl_db(self, audio_data, sos):
+        """Filter audio with one octave-band filter and return filtered signal + SPL."""
+        filtered_signal = signal.sosfilt(sos, audio_data)
+        spl_db = self.compute_spl_db(filtered_signal)
+
+        return filtered_signal, float(max(-120.0, spl_db))
+    # for 1 kHz octave band SPL
+
+    def mean_square_to_spl_db(self, mean_square, reference_pressure=20e-6):
+        """Convert mean square pressure to SPL dB."""
+        if mean_square <= 0:
+            return -120.0
+
+        return float(10 * np.log10(mean_square / (reference_pressure ** 2)))
+        #Zeitbewertung in fast and slow
     def compute_time_weighting_factor(self, tau):
         return np.exp(-1.0 / (self.sample_rate * tau))
     
