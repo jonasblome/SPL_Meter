@@ -180,8 +180,8 @@ HTML_PAGE_TAIL = """
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
                 document.getElementById('rms').textContent  = d.rms.toFixed(2);
                 document.getElementById('peak').textContent = d.peak.toFixed(2);
-                document.getElementById('fast').textContent = d.fast.toFixed(2);
-                document.getElementById('slow').textContent = d.slow.toFixed(2);
+                document.getElementById('fast').textContent = d.fast.toFixed(2) + ' dB';
+                document.getElementById('slow').textContent = d.slow.toFixed(2) + ' dB';
                 if (d.leq_is_running) {
                     document.getElementById('leq').textContent = 'running...';
                 } else if (d.leq_db !== null) {

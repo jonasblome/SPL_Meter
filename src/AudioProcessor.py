@@ -142,23 +142,47 @@ class AudioProcessor:
 
         return state
     
+    def compute_time_weighted_db(self, mean_square_pressure, reference_pressure=20e-6):
+        """
+        Convert a time-weighted mean-square pressure value to dB SPL.
+
+        Fast and Slow weighting smooth squared pressure values first.
+        The smoothed value then has to be converted to dB.
+        """
+        if mean_square_pressure <= 0:
+            return -np.inf
+
+        return 10 * np.log10(mean_square_pressure / reference_pressure**2)
+
     def compute_fast_state(self, audio_data):
+        """
+        Compute Fast time-weighted SPL in dB.
+
+        The internal fast_state stores the smoothed squared pressure.
+        The returned value is converted to dB for UI/export usage.
+        """
         self.fast_state = self.process_time_weighting_block(
             audio_data,
             self.fast_state,
             tau=0.125
         )
 
-        return self.fast_state
-
+        return self.compute_time_weighted_db(self.fast_state)
+    
     def compute_slow_state(self, audio_data):
+        """
+        Compute Slow time-weighted SPL in dB.
+
+        The internal slow_state stores the smoothed squared pressure.
+        The returned value is converted to dB for UI/export usage.
+        """
         self.slow_state = self.process_time_weighting_block(
             audio_data,
             self.slow_state,
             tau=1.0
         )
 
-        return self.slow_state
+        return self.compute_time_weighted_db(self.slow_state)
     
 
     def reset_leq_measurement(self):

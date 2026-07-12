@@ -35,9 +35,9 @@ class MeasurementExporter:
                 "a_weighted_spl_db": self._safe_float(
                     getattr(device_manager, "latest_a_weighted_spl_db", None)
                 ),
-                "fast_state": self._safe_float(getattr(device_manager, "latest_fast_state", None)),
-                "slow_state": self._safe_float(getattr(device_manager, "latest_slow_state", None)),
-                "time_weighted_value": self._safe_float(
+                "fast_db": self._safe_float(getattr(device_manager, "latest_fast_state", None)),
+                "slow_db": self._safe_float(getattr(device_manager, "latest_slow_state", None)),
+                "time_weighted_db": self._safe_float(
                     getattr(device_manager, "latest_time_weighted_value", None)
                 ),
                 "leq_db": self._safe_float(getattr(device_manager, "latest_leq_db", None)),

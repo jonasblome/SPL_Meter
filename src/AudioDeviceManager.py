@@ -130,15 +130,16 @@ class AudioDeviceManager:
         self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals)))
 
         # Time weighting
-        self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
-        self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
+        fast_db = self.audio_processor.compute_fast_state(audio_float)
+        slow_db = self.audio_processor.compute_slow_state(audio_float)
+
+        self.latest_fast_state = float(fast_db + self.calibration_offset_db)
+        self.latest_slow_state = float(slow_db + self.calibration_offset_db)
 
         if self.time_weighting == "Fast":
             self.latest_time_weighted_value = self.latest_fast_state
         else:
             self.latest_time_weighted_value = self.latest_slow_state
-
-        self._store_measurement_history_sample()
 
         # Store timestamped measurement values for JSON export.
         self._store_measurement_history_sample()
@@ -172,9 +173,9 @@ class AudioDeviceManager:
             "peak": self._safe_float(self.latest_peak),
             "a_weighted_spl_db": self._safe_float(self.latest_a_weighted_spl_db),
 
-            "fast_state": self._safe_float(self.latest_fast_state),
-            "slow_state": self._safe_float(self.latest_slow_state),
-            "time_weighted_value": self._safe_float(self.latest_time_weighted_value),
+            "fast_db": self._safe_float(self.latest_fast_state),
+            "slow_db": self._safe_float(self.latest_slow_state),
+            "time_weighted_db": self._safe_float(self.latest_time_weighted_value),
 
             "leq_db": self._safe_float(getattr(self, "latest_leq_db", None)),
             "leq_is_complete": bool(getattr(self, "latest_leq_is_complete", False)),
