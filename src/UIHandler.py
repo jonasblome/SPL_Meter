@@ -29,6 +29,25 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         .metric-box { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .metric-label { font-size: 13px; color: #666; margin-bottom: 8px; }
         .metric-value { font-size: 28px; font-weight: bold; color: #333; }
+        .level-meter {
+            margin-top: 12px; }
+        .level-bar {
+            width: 100%;
+            height: 16px;
+            background: #ddd;
+            border-radius: 8px;
+            overflow: hidden; }
+        .level-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: #4CAF50;
+            transition: width 0.2s ease;}
+        .level-ticks {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;}
         .filterband-section { margin-top: 24px; }
         .filterband-grid { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
         .filterband-box { display: flex; flex-direction: column; align-items: center; width: 60px; }
@@ -90,8 +109,40 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <div class="metric-box"><div class="metric-label">SPL</div><div class="metric-value" id="spl">-- dB</div></div>
         <div class="metric-box"><div class="metric-label">RMS</div><div class="metric-value" id="rms">--</div></div>
         <div class="metric-box"><div class="metric-label">Peak</div><div class="metric-value" id="peak">--</div></div>
-        <div class="metric-box"><div class="metric-label">Fast</div><div class="metric-value" id="fast">--</div></div>
-        <div class="metric-box"><div class="metric-label">Slow</div><div class="metric-value" id="slow">--</div></div>
+
+        <div class="metric-box">
+            <div class="metric-label">Fast</div>
+            <div class="metric-value" id="fast">-- dB</div>
+            <div class="level-meter">
+                <div class="level-bar">
+                    <div class="level-bar-fill" id="fast-bar"></div>
+                </div>
+                <div class="level-ticks">
+                    <span>30</span>
+                    <span>50</span>
+                    <span>70</span>
+                    <span>90</span>
+                    <span>110 dB</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="metric-box">
+            <div class="metric-label">Slow</div>
+            <div class="metric-value" id="slow">-- dB</div>
+            <div class="level-meter">
+                <div class="level-bar">
+                    <div class="level-bar-fill" id="slow-bar"></div>
+                </div>
+                <div class="level-ticks">
+                    <span>30</span>
+                    <span>50</span>
+                    <span>70</span>
+                    <span>90</span>
+                    <span>110 dB</span>
+                </div>
+            </div>
+        </div>
         <div class="metric-box"><div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div></div>
     </div>
     <hr>
@@ -171,6 +222,25 @@ HTML_PAGE_TAIL = """
             window.location.href = '/export_json';
         }
 
+        function dbToPercent(db, minDb = 20, maxDb = 130) {
+            if (typeof db !== 'number' || !Number.isFinite(db)) {
+                return 0;
+            }
+
+            const clamped = Math.max(minDb, Math.min(maxDb, db));
+            return ((clamped - minDb) / (maxDb - minDb)) * 100;
+        }
+
+        function updateLevelBar(barId, db) {
+            const bar = document.getElementById(barId);
+
+            if (!bar) {
+                return;
+            }
+
+            bar.style.width = dbToPercent(db).toFixed(1) + '%';
+        }
+
         function startSSE() {
             if (evtSource) evtSource.close();
             evtSource = new EventSource('/stream');
@@ -180,8 +250,23 @@ HTML_PAGE_TAIL = """
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
                 document.getElementById('rms').textContent  = d.rms.toFixed(2);
                 document.getElementById('peak').textContent = d.peak.toFixed(2);
-                document.getElementById('fast').textContent = d.fast.toFixed(2) + ' dB';
-                document.getElementById('slow').textContent = d.slow.toFixed(2) + ' dB';
+
+                if (d.fast !== null && d.fast !== undefined) {
+                    document.getElementById('fast').textContent = d.fast.toFixed(2) + ' dB';
+                    updateLevelBar('fast-bar', d.fast);
+                } else {
+                    document.getElementById('fast').textContent = '-- dB';
+                    updateLevelBar('fast-bar', null);
+                }
+
+                if (d.slow !== null && d.slow !== undefined) {
+                    document.getElementById('slow').textContent = d.slow.toFixed(2) + ' dB';
+                    updateLevelBar('slow-bar', d.slow);
+                } else {
+                    document.getElementById('slow').textContent = '-- dB';
+                    updateLevelBar('slow-bar', null);
+                }
+
                 if (d.leq_is_running) {
                     document.getElementById('leq').textContent = 'running...';
                 } else if (d.leq_db !== null) {

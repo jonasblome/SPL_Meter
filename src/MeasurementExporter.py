@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+import helpers
 
 
 class MeasurementExporter:
@@ -19,7 +20,6 @@ class MeasurementExporter:
             "measurement_setup": {
                 "sample_rate_hz": getattr(device_manager, "sample_rate", None),
                 "chunk_size": getattr(device_manager, "chunk_size", None),
-                "time_weighting": getattr(device_manager, "time_weighting", None),
                 "leq_duration_seconds": leq_duration_seconds,
                 "history_interval_seconds": getattr(
                     device_manager,
@@ -44,8 +44,8 @@ class MeasurementExporter:
                 "leq_is_complete": bool(getattr(device_manager, "latest_leq_is_complete", False)),
             },
 
-            "filterband_spl_db": self._safe_list(
-                getattr(device_manager, "latest_filterband_spl_db", [])
+            "filterbands": self._safe_filterbands(
+            getattr(device_manager, "latest_filterband_spl_db", [])
             ),
             
             "time_series": list(getattr(device_manager, "measurement_history", [])),
@@ -71,3 +71,30 @@ class MeasurementExporter:
             return []
 
         return [self._safe_float(value) for value in values]
+    
+    def _safe_filterbands(self, values):
+            """Return filterband center frequencies and SPL values in a compact table-like structure."""
+            if values is None:
+                values = []
+
+            frequencies = list(helpers.frequency_weights_octave.keys())
+
+            return {
+                "center_frequency_hz": [
+                    float(frequency)
+                    for frequency, _ in zip(frequencies, values)
+                ],
+                "spl_db": [
+                    self._round_float(value)
+                    for value in values[:len(frequencies)]
+                ]
+            }
+    
+    def _round_float(self, value, decimals=2):
+        """Convert numeric values to rounded Python floats for readable JSON export."""
+        safe_value = self._safe_float(value)
+
+        if safe_value is None:
+            return None
+
+        return round(safe_value, decimals)

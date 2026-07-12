@@ -166,7 +166,6 @@ class AudioDeviceManager:
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "elapsed_seconds": round(elapsed_seconds, 3),
 
-            "spl_db": self._safe_float(self.latest_spl_db),
             "z_weighted_spl_db": self._safe_float(self.latest_spl_db),
             "raw_spl_db": self._safe_float(getattr(self, "latest_raw_spl_db", None)),
             "rms": self._safe_float(self.latest_rms),
@@ -177,12 +176,19 @@ class AudioDeviceManager:
             "slow_db": self._safe_float(self.latest_slow_state),
             "time_weighted_db": self._safe_float(self.latest_time_weighted_value),
 
-            "leq_db": self._safe_float(getattr(self, "latest_leq_db", None)),
-            "leq_is_complete": bool(getattr(self, "latest_leq_is_complete", False)),
+            "peak_linear": self._safe_float(self.latest_peak),
+            "peak_dbfs": self._safe_float(self._linear_to_dbfs(self.latest_peak)),
         }
 
         self.measurement_history.append(sample)
         self._last_history_sample_time = now
+
+
+    # gives back the dBFS (fulls sclae digital signal) value. used for the peak:dBFS in the export
+    def _linear_to_dbfs(self, value):
+        if value is None or value <= 0:
+            return None
+        return 20 * np.log10(value)
 
 
     def _safe_float(self, value):
