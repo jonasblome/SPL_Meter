@@ -21,6 +21,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         #btn-start { background: #4CAF50; color: white; }
         #btn-stop  { background: #f44336; color: white; }
         #btn-start:disabled, #btn-stop:disabled { opacity: 0.4; cursor: default; }
+        #leq-result { width: 150px }
         .store-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 16px; cursor: pointer; }
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
@@ -70,37 +71,20 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
 <body>
     <h1>🎙️ SPL Meter Web UI</h1>
     <p>Simple web interface for the Raspberry Pi SPL Meter.</p>
+    
     <hr>
-    <div class="controls">
-        <button id="btn-start" onclick="startMeasurement()">Start Measurement</button>
-        <button id="btn-stop"  onclick="stopMeasurement()" disabled>Stop Measurement</button>
-    <div class="export">
-        <button onclick="downloadJson()">Download JSON</button>
-        </div>
-    </div>
+    
+    <h3>Prepare Measurement:</h3>
+
     <hr>
+
     <label class="store-toggle">
         <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
         Store Audio
     </label>
+    
     <hr>
-    <div class="Leq">
-        <strong>Leq Duration:</strong>
-        <select id="leq-duration" onchange="setLeqDuration(this.value)">
-            <option value="0" selected>5 s</option>
-            <option value="1">10 s</option>
-            <option value="2">15 s</option>
-            <option value="3">30 s</option>
-            <option value="4">60 s</option>
-            <option value="5">300 s</option>
-        </select>
-        <button onclick="startLeqMeasurement()">Start Leq</button>
-    </div>
-    <hr>
-    <label class="store-toggle">
-        <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
-        Store Audio
-    </label>
+
     <div class="num-bands">
         <strong>Number of Bands:</strong>
         <select id="num-bands" onchange="setNumBands(this.value)">
@@ -111,28 +95,103 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         </select>
         <span class="hint">More bands look nicer but need more processing power.</span>
     </div>
+
+    <hr>
+
     <div class="calibration">
         <strong>Calibration:</strong>
-        <span>Reference</span>
-        <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
-        <span>dB</span>
-
-        <span>Threshold</span>
-        <input id="threshold-db" type="number" value="50" min="0" max="140" step="0.1">
-        <span>dB</span>
-
-        <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
-        <span id="calibration-status">Not calibrated</span>
+        <div>
+            <span>Reference</span>
+            <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
+            <span>dB</span>
+        </div>
+        <div>
+            <span>Threshold</span>
+            <input id="threshold-db" type="number" value="50" min="0" max="140" step="0.1">
+            <span>dB</span>
+        </div>
+        <div>
+            <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
+        </div>
+        <div>
+            <span id="calibration-status">Not calibrated</span>
+        </div>
     </div>
+    
     <hr>
+    
+    <div class="controls">
+        <button id="btn-start" onclick="startMeasurement()">Start Measurement</button>
+        <button id="btn-stop"  onclick="stopMeasurement()" disabled>Stop Measurement</button>
+    </div>
     <div class="status stopped" id="status">Status: Stopped</div>
-    <div class="framerate" id="framerate">Target: 60 FPS | Actual: -- FPS</div>
+
     <hr>
+
+    <div class="export">
+        <button onclick="downloadJson()">Export to JSON</button>
+    </div>
+    
+    <hr>
+    
+    <div class="Leq">
+        <strong>Leq Duration:</strong>
+        <select id="leq-duration" onchange="setLeqDuration(this.value)">
+            <option value="0" selected>5 s</option>
+            <option value="1">10 s</option>
+            <option value="2">15 s</option>
+            <option value="3">30 s</option>
+            <option value="4">60 s</option>
+            <option value="5">300 s</option>
+        </select>
+    </div>
+    <div>
+        <button onclick="startLeqMeasurement()">Start Leq</button>
+    </div>
+    <div class="metric-box" id="leq-result">
+        <div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div>
+    </div>
+    
+    <hr>
+    
+    <div class="framerate" id="framerate">Target: 60 FPS | Actual: -- FPS</div>
     <div class="metrics">
-        <div class="metric-box"><div class="metric-label">A-Weighted</div><div class="metric-value" id="a-weighted">-- dB</div></div>
-        <div class="metric-box"><div class="metric-label">SPL</div><div class="metric-value" id="spl">-- dB</div></div>
-        <div class="metric-box"><div class="metric-label">RMS</div><div class="metric-value" id="rms">--</div></div>
         <div class="metric-box"><div class="metric-label">Peak</div><div class="metric-value" id="peak">--</div></div>
+        <div class="metric-box"><div class="metric-label">RMS</div><div class="metric-value" id="rms">--</div></div>
+
+        <div class="metric-box">
+            <div class="metric-label">SPL</div>
+            <div class="metric-value" id="spl_db">-- dB</div>
+            <div class="level-meter">
+                <div class="level-bar">
+                    <div class="level-bar-fill" id="spl-db-bar"></div>
+                </div>
+                <div class="level-ticks">
+                    <span>30</span>
+                    <span>50</span>
+                    <span>70</span>
+                    <span>90</span>
+                    <span>110 dB</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="metric-box">
+            <div class="metric-label">A-Weighted</div>
+            <div class="metric-value" id="a_weighted">-- dB</div>
+            <div class="level-meter">
+                <div class="level-bar">
+                    <div class="level-bar-fill" id="a-weighted-bar"></div>
+                </div>
+                <div class="level-ticks">
+                    <span>30</span>
+                    <span>50</span>
+                    <span>70</span>
+                    <span>90</span>
+                    <span>110 dB</span>
+                </div>
+            </div>
+        </div>
 
         <div class="metric-box">
             <div class="metric-label">Fast</div>
@@ -167,12 +226,13 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
                 </div>
             </div>
         </div>
-        <div class="metric-box"><div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div></div>
     </div>
+    
     <hr>
+    
     <div class="filterband-section">
-        <h3>Filterband SPL Levels (dB)</h3>
-        <div class="filterband-grid" id="filterband-grid">
+    <h3>Filterband SPL Levels (dB)</h3>
+    <div class="filterband-grid" id="filterband-grid">
 """
 
 HTML_PAGE_TAIL = """
@@ -313,10 +373,24 @@ HTML_PAGE_TAIL = """
             evtSource.onmessage = function(e) {
                 updateFramerate();
                 const d = JSON.parse(e.data);
-                document.getElementById('a-weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
-                document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
-                document.getElementById('rms').textContent  = d.rms.toFixed(2);
                 document.getElementById('peak').textContent = d.peak.toFixed(2);
+                document.getElementById('rms').textContent  = d.rms.toFixed(2);
+
+                if (d.spl_db !== null && d.spl_db !== undefined) {
+                    document.getElementById('spl_db').textContent = d.spl_db.toFixed(2) + ' dB';
+                    updateLevelBar('spl-db-bar', d.spl_db);
+                } else {
+                    document.getElementById('spl_db').textContent = '-- dB';
+                    updateLevelBar('spl-db-bar', null);
+                }
+
+                if (d.a_weighted !== null && d.a_weighted !== undefined) {
+                    document.getElementById('a_weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
+                    updateLevelBar('a-weighted-bar', d.a_weighted);
+                } else {
+                    document.getElementById('a_weighted').textContent = '-- dB';
+                    updateLevelBar('a-weighted-bar', null);
+                }
 
                 if (d.fast !== null && d.fast !== undefined) {
                     document.getElementById('fast').textContent = d.fast.toFixed(2) + ' dB';
