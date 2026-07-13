@@ -21,7 +21,9 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         #btn-start { background: #4CAF50; color: white; }
         #btn-stop  { background: #f44336; color: white; }
         #btn-start:disabled, #btn-stop:disabled { opacity: 0.4; cursor: default; }
-        #leq-result { width: 150px }
+        #calibration-div  { margin: 20px 0px; }
+        #leq-div  { margin: 20px 0px; }
+        #leq-result { width: 100px }
         .store-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 16px; cursor: pointer; }
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
@@ -99,21 +101,21 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     <hr>
 
     <div class="calibration">
-        <strong>Calibration:</strong>
-        <div>
-            <span>Reference</span>
+        <strong id="calibration-div">Calibration:</strong>
+        <div id="calibration-div">
+            <span>Reference:</span>
             <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
             <span>dB</span>
         </div>
-        <div>
-            <span>Threshold</span>
+        <div id="calibration-div">
+            <span>Threshold:</span>
             <input id="threshold-db" type="number" value="50" min="0" max="140" step="0.1">
             <span>dB</span>
         </div>
-        <div>
+        <div id="calibration-div">
             <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
         </div>
-        <div>
+        <div id="calibration-div">
             <span id="calibration-status">Not calibrated</span>
         </div>
     </div>
@@ -134,7 +136,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     
     <hr>
     
-    <div class="Leq">
+    <div class="Leq" id="leq-div">
         <strong>Leq Duration:</strong>
         <select id="leq-duration" onchange="setLeqDuration(this.value)">
             <option value="0" selected>5 s</option>
@@ -145,7 +147,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             <option value="5">300 s</option>
         </select>
     </div>
-    <div>
+    <div id="leq-div">
         <button onclick="startLeqMeasurement()">Start Leq</button>
     </div>
     <div class="metric-box" id="leq-result">

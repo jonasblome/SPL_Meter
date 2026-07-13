@@ -101,7 +101,7 @@ class AudioDeviceManager:
         self.should_store_recording = False
         self.recording_data_blocks = []
         self.recordings_dir = "/home/teamrapsberry/recordings_local"
-        # os.makedirs(self.recordings_dir, exist_ok=True)
+        os.makedirs(self.recordings_dir, exist_ok=True)
 
         # Maximum total size for stored recordings: 1.6 GB
         self.max_recordings_size_bytes = int(1.6 * 1024 * 1024 * 1024)
