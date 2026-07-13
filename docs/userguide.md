@@ -8,47 +8,40 @@ Diese Anleitung beschreibt, wie das SPL Meter auf dem Raspberry Pi Zero betriebe
 
 Das SPL Meter benötigt eine Netzwerkverbindung, damit du per SSH oder über die Web-UI darauf zugreifen kannst. Es gibt zwei Möglichkeiten, das WLAN einzurichten.
 
-### Variante A: Vor dem ersten Boot ( empfohlen )
+### Variante A: Über das USB-Laufwerk ( empfohlen )
 
-Diese Variante funktioniert nur bei einer frischen SD-Karte oder vor dem Einschalten des Pi.
+Das SPL Meter liest beim Boot automatisch eine Datei namens **`wifi_config.json`** vom USB-Laufwerk (dem „SPL Meter Storage"-Laufwerk, das am PC erscheint). So können WLAN-Zugangsdaten für mehrere Netzwerke hinterlegt werden, ohne SSH-Zugang zu benötigen.
 
-1. SD-Karte in den Computer einlegen.
-2. Die Partition **`boot`** öffnet sich im Explorer.
-3. Eine Datei mit dem Namen **`wpa_supplicant.conf`** im Stammverzeichnis der `boot`-Partition anlegen.
-4. Folgenden Inhalt einfügen und WLAN-Name sowie Passwort anpassen:
+**Schritt 1 – Datei anlegen oder bearbeiten:**
 
-```
-country=DE
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-update_config=1
+1. USB-Datenkabel an den Pi anschließen und warten bis das Laufwerk „SPL Meter Storage" im Explorer erscheint.
+2. Im Stammverzeichnis des Laufwerks eine Datei namens **`wifi_config.json`** anlegen (falls noch nicht vorhanden).
+3. Folgenden Inhalt einfügen und die SSIDs sowie Passwörter anpassen:
 
-network={
-    ssid="EUER_WLAN_NAME"
-    psk="EUER_WLAN_PASSWORT"
+```json
+{
+    "networks": [
+        {
+            "ssid": "Heimnetz",
+            "password": "mein_passwort"
+        },
+        {
+            "ssid": "Buero_WLAN",
+            "password": "buero_passwort"
+        }
+    ],
+    "country": "DE"
 }
 ```
 
-5. Eine **leere Datei** mit dem Namen **`ssh`** (ohne Dateiendung!) anlegen. Das aktiviert den SSH-Server beim Boot.
-6. SD-Karte in den Pi einsetzen und Strom anschließen.
-7. Nach ca. 30–60 Sekunden bootet der Pi und verbindet sich mit dem WLAN.
+> **Mehrere Netzwerke:** Es können beliebig viele `network`-Einträge angegeben werden. Der Pi verbindet sich automatisch mit dem stärksten verfügbaren Netzwerk aus der Liste.
 
-### Variante B: Über SSH (Pi ist bereits erreichbar)
+> **Offenes Netzwerk (kein Passwort):** Eintrag ohne `"password"`-Feld anlegen oder `"password": ""` setzen.
 
-Wenn du bereits eine Verbindung zum Pi hast, kannst du das WLAN auch nachträglich konfigurieren:
+**Schritt 2 – Pi neu starten:**
 
-```bash
-sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
-```
+Beim nächsten Boot liest der `wifi-connect`-Service die Datei aus und konfiguriert das WLAN automatisch. Es ist kein weiterer Eingriff nötig.
 
-Dort den gewünschten `network`-Block einfügen, speichern (`Strg+O`, `Enter`) und beenden (`Strg+X`). Anschließend neu verbinden:
-
-```bash
-sudo wpa_cli -i wlan0 reconfigure
-```
-
-> **Hinweis:** Wenn der Pi über Tailscale erreichbar sein soll, muss nach der WLAN-Verbindung Tailscale einmalig eingerichtet werden (siehe Kapitel 3).
-
----
 
 ## 2. SSH-Verbindung herstellen
 
@@ -90,15 +83,6 @@ ssh teamrapsberry@teamrapsberrypizero2-1.taild07c04.ts.net
 
 > Der aktuelle Tailscale-Hostname und Status sind im Tailscale-Admin-Panel unter [https://login.tailscale.com/admin/machines](https://login.tailscale.com/admin/machines) ersichtlich.
 
-### Verbindung über VS Code Remote-SSH
-
-Detaillierte Schritte für VS Code mit Tailscale findest du in der Datei:
-
-- `@c:\Users\Lars\Documents\GitHub\SPL_Meter\docs\connecting_to_raspberry_pi_zero.md`
-
-Darin ist erklärt, wie du die SSH-Config, die Remote-SSH-Erweiterung und die Verbindung in VS Code einrichtest.
-
----
 
 ## 3. Audioaufnahmen auf dem Pi ansehen
 
@@ -106,10 +90,10 @@ Das SPL Meter kann Audiodaten während der Messung als WAV-Dateien speichern. Da
 
 ### Speicherort
 
-Aufgenommene WAV-Dateien werden im folgenden Ordner abgelegt:
+Während des Betriebs werden WAV-Dateien lokal auf dem Pi abgelegt:
 
 ```
-/mnt/usb_share/recordings
+/home/teamrapsberry/recordings_local
 ```
 
 Der Dateiname setzt sich aus dem aktuellen Datum und der Uhrzeit zusammen, z. B.:
@@ -118,21 +102,25 @@ Der Dateiname setzt sich aus dem aktuellen Datum und der Uhrzeit zusammen, z. B.
 2026-07-06_14-32-10.wav
 ```
 
+Beim nächsten Boot werden diese Dateien automatisch in den `recordings`-Ordner auf dem USB-Laufwerk kopiert, damit sie später am PC über „SPL Meter Storage" abgerufen werden können.
+
+> **Speicherlimit:** Damit der Speicher nicht überläuft, werden alte WAV-Dateien automatisch gelöscht, sobald das gesamte Aufnahmevolumen 1,6 GB überschreitet. Es werden immer die ältesten Dateien zuerst entfernt.
+
 ### Aufnahmen ansehen
 
 Per SSH auf dem Pi:
 
 ```bash
-ls -la /mnt/usb_share/recordings
+ls -la /home/teamrapsberry/recordings_local
 ```
 
-Eine Datei anhören oder herunterladen:
+Eine Datei herunterladen:
 
 ```bash
-scp teamrapsberry@<IP-ADRESSE>:/mnt/usb_share/recordings/2026-07-06_14-32-10.wav .
+scp teamrapsberry@<IP-ADRESSE>:/home/teamrapsberry/recordings_local/2026-07-06_14-32-10.wav .
 ```
 
-Oder über die Weboberfläche des Mass-Storage-Gadgets: Wenn der Pi als USB-Laufwerk erkannt wird, findest du die Aufnahmen auf dem freigegebenen Speicher unter dem Ordner `recordings`.
+Oder über das USB-Laufwerk: Nach einem Reboot findest du die bisherigen Aufnahmen auf „SPL Meter Storage" im Ordner `recordings`.
 
 > **Achtung:** Das USB-Laufwerk wird erst korrekt erkannt, wenn der Pi vollständig gebootet ist. Zuerst Strom anschließen, warten und erst dann das Daten-USB-Kabel mit dem PC verbinden.
 
@@ -144,28 +132,18 @@ Das SPL Meter wird über eine **Web-UI** gesteuert. Die Flask-Weboberfläche lä
 
 ### Starten des Dienstes
 
-Nach der Einrichtung mit `setup.sh` startet das SPL Meter automatisch als Systemdienst:
+Nach der Einrichtung mit `setup.sh` startet das SPL Meter **automatisch beim Boot** als Systemdienst. Du musst es also **nicht selbst starten**, sobald der Pi läuft.
 
-```bash
-sudo systemctl start  spl-meter.service
-sudo systemctl stop   spl-meter.service
-sudo systemctl status spl-meter.service
-```
-
-Manuell starten:
-
-```bash
-cd ~/SPL_Meter
-source spl_meter_env/bin/activate
-python3 src/main.py
-```
-
-### Aufruf der Web-UI
-
-Sobald der Dienst läuft, ist die Oberfläche unter folgender Adresse erreichbar:
+Im Normalfall reicht es, die IP-Adresse des Pi zu ermitteln und die Web-UI im Browser zu öffnen:
 
 ```
 http://<IP-ADRESSE-DES-PI>:8501
+```
+
+Beispiel:
+
+```
+http://192.168.178.67:8501
 ```
 
 Wenn du über Tailscale verbunden bist, funktioniert auch:
@@ -173,6 +151,39 @@ Wenn du über Tailscale verbunden bist, funktioniert auch:
 ```
 http://teamrapsberrypizero2-1.taild07c04.ts.net:8501
 ```
+
+Falls nötig, kann der Dienst manuell gesteuert werden:
+
+```bash
+sudo systemctl start  spl-meter.service
+sudo systemctl stop   spl-meter.service
+sudo systemctl status spl-meter.service
+```
+
+Oder manuell aus dem Projektverzeichnis starten (nur für Tests oder Entwicklung):
+
+```bash
+cd ~/SPL_Meter
+source spl_meter_env/bin/activate
+python3 src/main.py
+```
+
+### Kommandozeilenoptionen
+
+Das Skript `src/main.py` kennt derzeit nur einen optionalen Parameter:
+
+| Befehl | Bedeutung |
+|---|---|
+| `python3 src/main.py` | Startet das SPL Meter mit dem echten Mikrofon (I2S). |
+| `python3 src/main.py --simulate /pfad/zur/datei.wav` | Startet das SPL Meter im Simulationsmodus und liest die Audioausgabe aus einer WAV-Datei. |
+
+Beispiel für den Simulationsmodus:
+
+```bash
+python3 src/main.py --simulate /home/teamrapsberry/testsignal.wav
+```
+
+> **Hinweis:** Die Klasse `CommandLineController` in `@c:\Users\Lars\Documents\GitHub\SPL_Meter\src\CommandLineController.py` ist aktuell nur ein Platzhalter und stellt keine weiteren Befehle zur Verfügung. Alle Steuerung erfolgt über die Web-UI oder den systemd-Dienst.
 
 ### Funktionen der Web-UI
 
@@ -183,7 +194,7 @@ Die Oberfläche zeigt folgende Bereiche an:
 | **Start / Stop Measurement** | Mikrofonaufnahme starten oder stoppen |
 | **Leq Duration** | Messdauer für eine Leq-Messung auswählen (5 s, 10 s, 15 s, 30 s, 60 s, 300 s) |
 | **Start Leq** | Eine integrierte Leq-Messung über die gewählte Dauer starten |
-| **Store Audio** | Aktiviert die Speicherung der Aufnahme als WAV-Datei unter `/mnt/usb_share/recordings` |
+| **Store Audio** | Aktiviert die Speicherung der Aufnahme als WAV-Datei unter `/home/teamrapsberry/recordings_local` |
 | **Calibration** | Mikrofon mit einem bekannten Schalldruckpegel (z. B. 94 dB) kalibrieren |
 
 ### Angezeigte Messwerte
@@ -202,13 +213,15 @@ Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balk
 
 ### Ablauf einer typischen Messung
 
-1. Pi einschalten und sicherstellen, dass er mit dem Netzwerk verbunden ist.
-2. Web-UI im Browser öffnen.
+1. Pi einschalten und warten, bis er mit dem Netzwerk verbunden ist.
+2. IP-Adresse des Pi ermitteln und die Web-UI im Browser öffnen: `http://<IP-ADRESSE>:8501`.
+   > Der Dienst startet automatisch – es ist kein manuelles Starten nötig.
 3. Auf **„Start Measurement“** klicken.
 4. Optional: **„Store Audio“** aktivieren, um die Aufnahme zu speichern.
 5. Optional: **„Leq Duration“** wählen und **„Start Leq“** klicken.
 6. Nach der Messung auf **„Stop Measurement“** klicken.
-7. Aufgenommene WAV-Dateien liegen unter `/mnt/usb_share/recordings`.
+7. Aufgenommene WAV-Dateien liegen zunächst unter `/home/teamrapsberry/recordings_local`.
+8. Nach einem Reboot erscheinen die Aufnahmen automatisch auf dem USB-Laufwerk unter `recordings/`.
 
 ---
 
@@ -217,6 +230,7 @@ Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balk
 - Der Pi Zero hat zwei Micro-USB-Anschlüsse: **PWR IN** (nur Strom) und **USB** (Daten + Strom). Für den Mass-Storage-Modus zuerst Strom anschließen, booten lassen und dann das Datenkabel an den USB-Port stecken.
 - Für stabile Datenverbindungen ein **Charge & Sync**-Kabel verwenden, kein reines Ladekabel.
 - Bei Problemen mit der WLAN-Verbindung die IP-Adresse im Router prüfen oder `sudo systemctl status spl-meter.service` auf dem Pi ausführen.
+- **Speicherlimit für Aufnahmen:** Das SPL Meter löscht automatisch die ältesten WAV-Dateien, sobald das gesamte Aufnahmevolumen 1,6 GB überschreitet. Wichtige Messungen sollten daher regelmäßig vom Pi oder USB-Laufwerk gesichert werden.
 
 ---
 

@@ -1,0 +1,110 @@
+SPL Meter on a
+Raspberry Pi Zero W
+Presentation von Jonas Blome (510438), Jonathan Ploch (XXXXXX), Lars Dickmann (0486312) und Tianyi Feng (XXXXXX)
+
+Aufgabe
+Ziel des Projekts ist der Entwurf und Aufbau eines portablen, eingebetteten Schallpegelmessgeräts (SPL Meter).
+Das Gerät berechnet in Echtzeit typische Audio-Kennwerte und wird auf einem Raspberry Pi Zero W betrieben.
+Schwerpunkt liegt auf ressourcenschonender, hardwarenaher Python-Programmierung.
+
+Kernpunkte:
+- Echtzeit-Berechnung von SPL-Metriken (Peak, RMS, SPL in dB)
+- Zeitbewertungen Fast und Slow nach IEC 61672-1
+- A- und Z-Frequenzbewertung
+- Oktav- und Terzbandanalyse
+- Export der Messdaten als JSON
+- Leichtgewichtige Web-Oberfläche zur Bedienung
+
+Anforderungen
+Muss:
+- Digitaler Audioeingang über USB mit bis zu 48 kHz Abtastrate
+- Echtzeit SPL-Berechnung: Peak, RMS und SPL in dB
+- Zeitbewertung: Fast (125 ms) und Slow (1 s)
+- Leq-Messung über einstellbare Messdauer
+- Oktav- und Terzbandanalyse
+- Frequenzbewertung: Z-Bewertung (linear) und A-Bewertung (nach DIN/IEC)
+- Leichtgewichtige Web-UI zur Anzeige und Steuerung
+- JSON-Export der Messdaten
+
+Kann:
+- Mikrofonkalibrierung mit Kalibrierungston
+- Command Line Steuerung für Automatisierung
+- Audio-Aufzeichnung der Messung zur Dokumentation
+- Betrieb mit simuliertem Audio-Stream (WAV-Datei) für Tests ohne Hardware
+
+Umsetzung
+Software-Stack
+- Python 3.12.x
+- Flask (Web-UI und REST-API)
+- PyAudio (Audio-Stream vom USB-Mikrofon)
+- NumPy (Vektorisierte Audio-Verarbeitung)
+- SciPy (Filterdesign, Frequenzbewertung)
+
+Verwendete Hardware
+- Raspberry Pi Zero W
+- Adafruit I2S MEMS Mikrofon Breakout (ICS-43434, 6049)
+- Entwicklungs-PC mit Tailscale VPN und VS Code (Remote SSH)
+
+Architektur
+- main.py: Einstiegspunkt, parst Kommandozeilenargumente
+- SPLMeter.py: Verbindet alle Komponenten und startet die UI
+- AudioDeviceManager.py: Öffnet PyAudio-Stream und liefert Audio-Blöcke
+- AudioDeviceSimulator.py: Simuliert Audioeingang per WAV-Datei
+- AudioProcessor.py: Berechnet Peak, RMS, Leq, Fast/Slow, Oktav-/Terzband und Frequenzbewertung
+- UIHandler.py: Flask-Server, Web-Endpunkte und Dashboard-Logik
+- helpers.py: Hilfsfunktionen, z. B. Dezibel-Konvertierung
+
+Datenfluss
+1. Mikrofon liefert PCM-Blöcke (chunk_size = 1024, sample_rate = 48000)
+2. AudioDeviceManager puffert und leitet Blöcke an AudioProcessor weiter
+3. AudioProcessor berechnet pro Block die gewünschten Kennwerte
+4. UIHandler aktualisiert die Web-UI und beantwortet Nutzeraktionen
+5. Messdaten werden als JSON exportiert oder optional als WAV gespeichert
+
+Dokumentation
+- README.md: Projektüberblick und Startanleitung
+- docs/connecting_to_raspberry_pi_zero.md: SSH-Zugriff und Tailscale-Einrichtung
+- docs/userguide.md: Bedienungsanleitung für die Web-UI
+- docs/architecture/architecture.md: Software-Architektur und Komponenten
+- setup.sh, spl-meter.service: Installation und Autostart auf dem Pi
+- Inline-Kommentare und Docstrings im Python-Code
+
+Folie: Live Demo
+Was wir live zeigen:
+- Start der SPL-Meter-Software auf dem Raspberry Pi Zero W
+- Übergabe vom Terminal an die Flask-Web-UI
+- Anzeige der aktuellen Schallpegel in Echtzeit
+- Wechsel zwischen Fast- und Slow-Bewertung
+- Starten und Stoppen einer Leq-Messung
+- Export der Messdaten als JSON und kurze Ansicht der Datei
+
+Aufbau der Folie:
+- Screenshot der Web-UI im Zentrum
+- Kurze Kommandozeilen-Befehle als Seitnotizen
+- QR-Code oder URL für die Web-UI (optional)
+
+Hinweise für die Präsentation:
+- Stabile Stromversorgung des Pi sicherstellen
+- Vorab prüfen, ob Mikrofon erkannt wird (AudioDeviceManager.list_devices())
+- Fallback: Simulationsmodus mit --simulate tests/testfiles/demo.wav
+- Netzwerkverbindung testen (Tailscale oder lokales WLAN)
+
+Demonstration
+Ablauf im Live-Betrieb:
+1. Verbindung mit dem Raspberry Pi herstellen
+2. Software starten: python3 src/main.py
+3. Web-UI im Browser öffnen (http://<pi-ip>:5000)
+4. Optional: Mikrofonkalibrierung durchführen
+5. Dauerhafte Messung starten (Peak, RMS, SPL, Fast/Slow)
+6. Leq-Messung über z. B. 10 Sekunden starten
+7. Messung stoppen
+8. JSON-Export der Messdaten erzeugen und anzeigen
+9. Steuerung über Kommandozeile zeigen (optional: --simulate demo.wav)
+
+Ausblick / Diskussionsfragen
+- Welche weiteren Metriken könnten sinnvoll sein? (z. B. Lmin, Lmax, L10, L90)
+- Wie lässt sich die Kalibrierung automatisieren?
+- Einsatzmöglichkeiten im Arbeits- oder Umweltschutz?
+- Optimierung der Latenz oder des Energieverbrauchs auf dem Pi Zero W
+
+Das war’s, wir freuen uns auf eure Fragen!

@@ -1,0 +1,13 @@
+{
+    "networks": [
+        {
+            "ssid": "Heimnetz",
+            "password": "mein_passwort"
+        },
+        {
+            "ssid": "Buero_WLAN",
+            "password": "buero_passwort"
+        }
+    ],
+    "country": "DE"
+}

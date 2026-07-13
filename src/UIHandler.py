@@ -25,6 +25,8 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
         .status.stopped { color: #f44336; }
+        .framerate { font-size: 14px; color: #666; margin: 4px 0; }
+        .hint { font-size: 13px; color: #888; margin-left: 8px; }
         .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px; margin-top: 24px; }
         .metric-box { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .metric-label { font-size: 13px; color: #666; margin-bottom: 8px; }
@@ -60,7 +62,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             line-height: 1.2;
         }
         .filterband-bar-container { display: flex; flex-direction: column-reverse; width: 30px; height: 150px; background: #f0f2f6; border-radius: 4px; border: 1px solid #e1e4e8; }
-        .filterband-bar-fill { background: #ff4b4b; border-radius: 0 0 4px 4px; width: 100%; transition: height 0.2s; }
+        .filterband-bar-fill { background: #ff4b4b; border-radius: 0 0 4px 4px; width: 100%; transition: height 0.05s linear; will-change: height; }
         .filterband-freq { font-size: 12px; color: #666; margin-top: 4px; }
         hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
     </style>
@@ -94,15 +96,37 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         </select>
         <button onclick="startLeqMeasurement()">Start Leq</button>
     </div>
+    <hr>
+    <label class="store-toggle">
+        <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
+        Store Audio
+    </label>
+    <div class="num-bands">
+        <strong>Number of Bands:</strong>
+        <select id="num-bands" onchange="setNumBands(this.value)">
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="10" selected>10</option>
+        </select>
+        <span class="hint">More bands look nicer but need more processing power.</span>
+    </div>
     <div class="calibration">
         <strong>Calibration:</strong>
+        <span>Reference</span>
         <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
         <span>dB</span>
+
+        <span>Threshold</span>
+        <input id="threshold-db" type="number" value="50" min="0" max="140" step="0.1">
+        <span>dB</span>
+
         <button onclick="calibrateMicrophone()">Calibrate Microphone</button>
         <span id="calibration-status">Not calibrated</span>
     </div>
     <hr>
     <div class="status stopped" id="status">Status: Stopped</div>
+    <div class="framerate" id="framerate">Target: 60 FPS | Actual: -- FPS</div>
     <hr>
     <div class="metrics">
         <div class="metric-box"><div class="metric-label">A-Weighted</div><div class="metric-value" id="a-weighted">-- dB</div></div>
@@ -156,6 +180,19 @@ HTML_PAGE_TAIL = """
     </div>
     <script>
         let evtSource = null;
+        const TARGET_FPS = 60;
+        let fpsHistory = [];
+
+        function updateFramerate() {
+            const now = performance.now();
+            fpsHistory.push(now);
+            // Keep only timestamps from the last second
+            const cutoff = now - 1000;
+            fpsHistory = fpsHistory.filter(t => t >= cutoff);
+            const actualFps = fpsHistory.length;
+            document.getElementById('framerate').textContent =
+                `Target: ${TARGET_FPS} FPS | Actual: ${actualFps} FPS`;
+        }
 
         function startMeasurement() {
             fetch('/start', {method: 'POST'}).then(() => {
@@ -175,6 +212,8 @@ HTML_PAGE_TAIL = """
                 const s = document.getElementById('status');
                 s.textContent = 'Status: Stopped';
                 s.className = 'status stopped';
+                document.getElementById('framerate').textContent = 'Target: ' + TARGET_FPS + ' FPS | Actual: -- FPS';
+                fpsHistory = [];
                 if (evtSource) { evtSource.close(); evtSource = null; }
             });
         }
@@ -197,16 +236,26 @@ HTML_PAGE_TAIL = """
             const referenceDb = Number(
                 document.getElementById('reference-db').value
             );
+            const thresholdDb = Number(
+                document.getElementById('threshold-db').value
+            );
+
+            document.getElementById('calibration-status').textContent =
+                'Starting calibration...';
 
             fetch('/calibrate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({reference_db: referenceDb})
+                body: JSON.stringify({
+                    reference_db: referenceDb,
+                    threshold_db: thresholdDb
+                })
             })
             .then(response => response.json())
             .then(data => {
                 document.getElementById('calibration-status').textContent =
-                    'Offset: ' + data.offset_db.toFixed(2) + ' dB';
+                    data.message || data.error || 'Calibration started';
+                startSSE();
             });
         }
 
@@ -214,6 +263,27 @@ HTML_PAGE_TAIL = """
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
         }
 
+        function setNumBands(value) {
+            const numBands = Number(value);
+            fetch('/num_bands', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({num_bands: numBands})
+            });
+            updateBandVisibility(numBands);
+        }
+
+        function updateBandVisibility(numBands) {
+            for (let i = 0; i < 12; i++) {
+                const box = document.getElementById('band-' + i);
+                if (box) {
+                    box.style.display = i < numBands ? 'flex' : 'none';
+                }
+            }
+        }
+
+        // Apply initial visibility on page load
+        updateBandVisibility(Number(document.getElementById('num-bands').value));
         function downloadJson() {
             window.location.href = '/export_json';
         }
@@ -241,6 +311,7 @@ HTML_PAGE_TAIL = """
             if (evtSource) evtSource.close();
             evtSource = new EventSource('/stream');
             evtSource.onmessage = function(e) {
+                updateFramerate();
                 const d = JSON.parse(e.data);
                 document.getElementById('a-weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
@@ -267,6 +338,16 @@ HTML_PAGE_TAIL = """
                     document.getElementById('leq').textContent = 'running...';
                 } else if (d.leq_db !== null) {
                     document.getElementById('leq').textContent = d.leq_db.toFixed(2) + ' dB';
+                }
+                if (d.calibration) {
+                    let calibrationText = d.calibration.status;
+
+                    if (d.calibration.active) {
+                        calibrationText +=
+                            ' | 1 kHz: ' + d.calibration.band_spl_db.toFixed(2) + ' dB';
+                    }
+
+                    document.getElementById('calibration-status').textContent = calibrationText;
                 }
                 if (d.filterband_spl_db) {
                     d.filterband_spl_db.forEach((spl, i) => {
@@ -396,8 +477,9 @@ class UIHandler:
 
             data = request.get_json() or {}
             reference_db = float(data.get("reference_db", 94.0))
+            threshold_db = float(data.get("threshold_db", 50.0))
 
-            result = device_manager.calibrate_microphone(reference_db)
+            result = device_manager.calibrate_microphone(reference_db, threshold_db)
             return jsonify(result)
         
         @self.app.route("/store_recording", methods=["POST"])
@@ -405,6 +487,14 @@ class UIHandler:
             data = request.get_json()
             device_manager.should_store_recording = bool(data.get("store", False))
             return jsonify({"store": device_manager.should_store_recording})
+
+        @self.app.route("/num_bands", methods=["POST"])
+        def num_bands():
+            data = request.get_json()
+            num_bands = int(data.get("num_bands", 10))
+            device_manager.set_num_bands(num_bands)
+            print(f"Number of bands set to {num_bands}")
+            return jsonify({"num_bands": num_bands})
 
         @self.app.route("/stream")
         def stream():
@@ -423,9 +513,18 @@ class UIHandler:
                         "leq_db":             device_manager.latest_leq_db,
                         "leq_is_complete":    device_manager.latest_leq_is_complete,
                         "leq_is_running":     device_manager.audio_processor.leq_is_running,
+                        "calibration": {
+                        "active": device_manager.is_calibrating,
+                        "status": device_manager.calibration_status,
+                        "reference_db": device_manager.calibration_reference_db,
+                        "threshold_db": device_manager.calibration_threshold_db,
+                        "band_spl_db": device_manager.latest_calibration_band_spl_db,
+                        "measured_db": device_manager.calibration_measured_db,
+                        "offset_db": device_manager.calibration_offset_db,
+                    },
                     })
                     yield f"data: {payload}\n\n"
-                    time.sleep(0.05)  # 20 Hz update rate
+                    time.sleep(0.0167)  # ~60 Hz update rate
             return Response(event_generator(), mimetype="text/event-stream")
         
         @self.app.route("/export_json", methods=["GET"])

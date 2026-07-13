@@ -1,0 +1,16 @@
+[Unit]
+Description=USB Mass Storage Gadget
+After=local-fs.target sync-recordings.service
+Before=spl-meter.service
+Wants=sync-recordings.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/usb_gadget_setup.sh
+ExecStop=/bin/bash -c 'echo "" > /sys/kernel/config/usb_gadget/mygadget/UDC 2>/dev/null || true'
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
