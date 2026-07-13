@@ -53,6 +53,7 @@ class AudioDeviceManager:
         self.latest_peak = 0.0
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
+
         # Prepare filterbank in advance to only calculate once
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
@@ -61,17 +62,17 @@ class AudioDeviceManager:
         # Time weighting
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
+
         # Latest Leq values used by the UI stream and JSON export.
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
+
         # Time series of measurement values for JSON export.
         # One entry is stored approximately once per second during recording.
         self.measurement_history = []
         self.measurement_history_interval_seconds = 1.0
         self._last_history_sample_time = 0.0
         self._measurement_start_time = None
-        self.time_weighting = "Fast"
-        self.latest_time_weighted_value = 0.0
 
         # File recording
         self.storing_format = pyaudio.paFloat32
@@ -136,11 +137,6 @@ class AudioDeviceManager:
         self.latest_fast_state = float(fast_db + self.calibration_offset_db)
         self.latest_slow_state = float(slow_db + self.calibration_offset_db)
 
-        if self.time_weighting == "Fast":
-            self.latest_time_weighted_value = self.latest_fast_state
-        else:
-            self.latest_time_weighted_value = self.latest_slow_state
-
         # Store timestamped measurement values for JSON export.
         self._store_measurement_history_sample()
         
@@ -174,7 +170,6 @@ class AudioDeviceManager:
 
             "fast_db": self._safe_float(self.latest_fast_state),
             "slow_db": self._safe_float(self.latest_slow_state),
-            "time_weighted_db": self._safe_float(self.latest_time_weighted_value),
 
             "peak_linear": self._safe_float(self.latest_peak),
             "peak_dbfs": self._safe_float(self._linear_to_dbfs(self.latest_peak)),
