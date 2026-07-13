@@ -142,23 +142,106 @@ class AudioProcessor:
 
         return state
     
+    def compute_time_weighted_db(self, mean_square_pressure, reference_pressure=20e-6):
+        """
+        Convert a time-weighted mean-square pressure value to dB SPL.
+
+        Fast and Slow weighting smooth squared pressure values first.
+        The smoothed value then has to be converted to dB.
+        """
+        if mean_square_pressure <= 0:
+            return -np.inf
+
+        return 10 * np.log10(mean_square_pressure / reference_pressure**2)
+
     def compute_fast_state(self, audio_data):
+        """
+        Compute Fast time-weighted SPL in dB.
+
+        The internal fast_state stores the smoothed squared pressure.
+        The returned value is converted to dB for UI/export usage.
+        """
         self.fast_state = self.process_time_weighting_block(
             audio_data,
             self.fast_state,
             tau=0.125
         )
 
-        return self.fast_state
-
+        return self.compute_time_weighted_db(self.fast_state)
+    
     def compute_slow_state(self, audio_data):
+        """
+        Compute Slow time-weighted SPL in dB.
+
+        The internal slow_state stores the smoothed squared pressure.
+        The returned value is converted to dB for UI/export usage.
+        """
         self.slow_state = self.process_time_weighting_block(
             audio_data,
             self.slow_state,
             tau=1.0
         )
 
-        return self.slow_state
+        return self.compute_time_weighted_db(self.slow_state)
+    
+
+    def reset_leq_measurement(self):
+        """Reset all internal values used for Leq measurement."""
+        self.leq_sum_square = 0.0
+        self.leq_sample_count = 0
+        self.leq_target_sample_count = 0
+
+        self.leq_duration_seconds = None
+        self.leq_sample_rate = None
+
+        self.leq_is_running = False
+        self.leq_result_db = None
+
+    def start_leq_measurement(self, duration_seconds, sample_rate):
+        """
+        Start a new fixed-duration Leq measurement.
+        """
+        if duration_seconds <= 0:
+            raise ValueError("duration_seconds must be greater than zero")
+
+        if sample_rate <= 0:
+            raise ValueError("sample_rate must be greater than zero")
+
+        self.reset_leq_measurement()
+
+        self.leq_duration_seconds = duration_seconds
+        self.leq_sample_rate = sample_rate
+        self.leq_target_sample_count = int(duration_seconds * sample_rate)
+
+        self.leq_is_running = True
+        self.leq_result_db = None
+
+    
+    def process_leq_measurement(self, audio_data, reference_pressure=20e-6):
+        """
+        Process one audio block for the running Leq measurement.
+        """
+        if not self.leq_is_running:
+            raise RuntimeError("Leq measurement has not been started.")
+
+        remaining_samples = self.leq_target_sample_count - self.leq_sample_count
+        audio_data = audio_data[:remaining_samples]
+
+        self.leq_sum_square += np.sum(audio_data**2)
+        self.leq_sample_count += len(audio_data)
+
+        if self.leq_sample_count < self.leq_target_sample_count:
+            return None, False
+
+        self.leq_is_running = False
+
+        if self.leq_sample_count == 0 or self.leq_sum_square == 0:
+            self.leq_result_db = -np.inf
+        else:
+            mean_square = self.leq_sum_square / self.leq_sample_count
+            self.leq_result_db = 10 * np.log10(mean_square / reference_pressure**2)
+
+        return self.leq_result_db, True
     
     def design_a_weighting_filterbank(self, sample_rate, is_octave=True):
         octave_ratio = 10**(3/10) if is_octave else 10**(1/10)
