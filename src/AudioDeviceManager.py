@@ -62,26 +62,25 @@ class AudioDeviceManager:
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
        
-        # Calibration state 1000 Hz s octave band。
+        # Calibration
         self.octave_center_freqs = list(helpers.frequency_weights_octave.keys())
         self.calibration_band_index = min(
             range(len(self.octave_center_freqs)),
             key=lambda i: abs(float(self.octave_center_freqs[i]) - 1000.0)
         )
-
         self.is_calibrating = False
         self.calibration_status = "Not calibrated"
         self.calibration_reference_db = 94.0
         self.calibration_threshold_db = 50.0
         self.calibration_timeout_s = 5.0
         self.calibration_duration_s = 1.0
-
         self.calibration_started_at = None
         self.calibration_measurement_started = False
         self.calibration_power_sum = 0.0
         self.calibration_sample_count = 0
         self.calibration_measured_db = None
         self.latest_calibration_band_spl_db = 0.0
+        
         # Time weighting
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0

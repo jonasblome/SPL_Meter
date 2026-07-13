@@ -7,24 +7,24 @@ class SPLMeter:
     def __init__(self, simulate=False, wav_path=None):
         print("SPLMeter: Initializing")
 
-        self.audioProcessor = AudioProcessor.AudioProcessor()
+        self.audio_processor = AudioProcessor.AudioProcessor()
 
         if simulate and wav_path:
-            self.audioDeviceManager = AudioDeviceSimulator.AudioDeviceSimulator(
+            self.audio_device_manager = AudioDeviceSimulator.AudioDeviceSimulator(
                 wav_path=wav_path,
                 chunk_size=1024,
-                audio_processor=self.audioProcessor
+                audio_processor=self.audio_processor
             )
         else:
-            self.audioDeviceManager = AudioDeviceManager.AudioDeviceManager(
+            self.audio_device_manager = AudioDeviceManager.AudioDeviceManager(
                 sample_rate=48000,
                 chunk_size=1024,
                 device_index=0, # set to 0 for Pi microphone, adjust as needed
-                audio_processor=self.audioProcessor
+                audio_processor=self.audio_processor
             )
-        self.audioDeviceManager.list_devices()
+        self.audio_device_manager.list_devices()
 
-        self.uiHandler = UIHandler.UIHandler(self.audioDeviceManager)
+        self.ui_handler = UIHandler.UIHandler(self.audio_device_manager)
 
     def run(self):
-        self.uiHandler.run()
+        self.ui_handler.run()
