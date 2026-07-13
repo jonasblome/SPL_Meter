@@ -1,5 +1,6 @@
 """Render a Python source file as 16:9 code images in VS Code Dark+ colors."""
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -16,8 +17,8 @@ from pygments.token import Token
 # Configuration
 # --------------------------------------------------------------------------- #
 
-SOURCE_FILE = Path(__file__).resolve().parent.parent / "src" / "AudioDeviceManager.py"
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "presentation" / "code_images"
+DEFAULT_SOURCE = Path(__file__).resolve().parent.parent / "src" / "AudioDeviceManager.py"
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "presentation" / "code_images"
 
 WIDTH = 1920
 ASPECT_W = 16
@@ -197,7 +198,7 @@ def render_code_image(source_path, width=WIDTH):
     return img
 
 
-def slice_into_16_9(full_image, output_dir):
+def slice_into_16_9(full_image, output_dir, stem):
     """Cut the rendered image into 16:9 slices and save them."""
     output_dir.mkdir(parents=True, exist_ok=True)
     width, total_height = full_image.size
@@ -216,19 +217,42 @@ def slice_into_16_9(full_image, output_dir):
         slices.append(crop)
 
     for idx, img in enumerate(slices, start=1):
-        out_path = output_dir / f"AudioDeviceManager_{idx:02d}.png"
+        out_path = output_dir / f"{stem}_{idx:02d}.png"
         img.save(out_path, "PNG")
         print(f"Saved {out_path} ({img.width}x{img.height})")
 
     return slices
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Render a Python source file as 16:9 code images in VS Code Dark+ colors."
+    )
+    parser.add_argument(
+        "source",
+        nargs="?",
+        default=str(DEFAULT_SOURCE),
+        help="Python source file to render",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        default=str(DEFAULT_OUTPUT_DIR),
+        help="Directory where the PNG slices will be saved",
+    )
+    return parser.parse_args()
+
+
 def main():
-    print(f"Rendering {SOURCE_FILE} ...")
-    full_image = render_code_image(SOURCE_FILE)
+    args = parse_args()
+    source_path = Path(args.source)
+    output_dir = Path(args.output_dir)
+
+    print(f"Rendering {source_path} ...")
+    full_image = render_code_image(source_path)
     print(f"Full rendered image: {full_image.width}x{full_image.height}")
-    slices = slice_into_16_9(full_image, OUTPUT_DIR)
-    print(f"Created {len(slices)} 16:9 image(s) in {OUTPUT_DIR}")
+    slices = slice_into_16_9(full_image, output_dir, source_path.stem)
+    print(f"Created {len(slices)} 16:9 image(s) in {output_dir}")
 
 
 if __name__ == "__main__":
