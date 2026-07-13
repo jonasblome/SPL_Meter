@@ -24,8 +24,8 @@ class SPLMeter:
             self.audio_device_manager = AudioDeviceManager.AudioDeviceManager(
                 sample_rate=48000,
                 chunk_size=1024,
-                device_index=3, # set to 0 for Pi microphone, adjust as needed
-                audio_processor=self.audio_processor
+                device_index=0, # set to 0 for Pi microphone, adjust as needed
+                audio_processor=self.audioProcessor
             )
         self.audio_device_manager.list_devices()
 

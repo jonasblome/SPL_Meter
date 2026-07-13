@@ -6,7 +6,9 @@ Simple I2S microphone reader for Raspberry Pi Zero W
 
 import os
 import time
+import glob
 import numpy as np
+import helpers
 
 os.environ.setdefault("JACK_NO_AUDIO_RESERVATION", "1")
 os.environ.setdefault("JACK_NO_START_SERVER", "1")
@@ -51,26 +53,60 @@ class AudioDeviceManager:
         self.latest_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_peak = 0.0
-        
+        self.latest_leq_db = None
+        self.latest_leq_is_complete = False
+
         # Prepare filterbank in advance to only calculate once
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
+        self.num_bands = min(10, len(self.filterbank))
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
+       
+        # Calibration state 1000 Hz s octave band。
+        self.octave_center_freqs = list(helpers.frequency_weights_octave.keys())
+        self.calibration_band_index = min(
+            range(len(self.octave_center_freqs)),
+            key=lambda i: abs(float(self.octave_center_freqs[i]) - 1000.0)
+        )
 
+        self.is_calibrating = False
+        self.calibration_status = "Not calibrated"
+        self.calibration_reference_db = 94.0
+        self.calibration_threshold_db = 50.0
+        self.calibration_timeout_s = 5.0
+        self.calibration_duration_s = 1.0
+
+        self.calibration_started_at = None
+        self.calibration_measurement_started = False
+        self.calibration_power_sum = 0.0
+        self.calibration_sample_count = 0
+        self.calibration_measured_db = None
+        self.latest_calibration_band_spl_db = 0.0
         # Time weighting
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
 
-        # Leq measurement state for UI display
+        # Latest Leq values used by the UI stream and JSON export.
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
+
+        # Time series of measurement values for JSON export.
+        # One entry is stored approximately once per second during recording.
+        self.measurement_history = []
+        self.measurement_history_interval_seconds = 1.0
+        self._last_history_sample_time = 0.0
+        self._measurement_start_time = None
 
         # File recording
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
-        self.recordings_dir = "/mnt/usb_share/recordings"
+        self.recordings_dir = "/home/teamrapsberry/recordings_local"
         os.makedirs(self.recordings_dir, exist_ok=True)
+
+        # Maximum total size for stored recordings: 1.6 GB
+        self.max_recordings_size_bytes = int(1.6 * 1024 * 1024 * 1024)
+
         
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
@@ -82,25 +118,43 @@ class AudioDeviceManager:
         
         # Normalize to float [-1.0, 1.0] (24-bit range = 2^23)
         audio_float = audio_data.astype(np.float32) / 8388608.0
-
-        # Convert multi-channel input to mono for SPL/Leq processing.
-        # Without this, stereo input would be counted as twice as many samples,
-        # causing fixed-duration Leq measurements to finish too early.
-        if self.num_channels > 1:
-            audio_float = audio_float.reshape(-1, self.num_channels).mean(axis=1)
+        
+        # Process microphone calibration if active
+        self._process_microphone_calibration(audio_float)
+        
+        # Convert multi-channel audio to mono before SPL/Leq processing.
+        # PyAudio's frame_count is the number of time samples per channel.
+        # If audio_float contains more values than frame_count, the extra values are channels.
+        if frame_count > 0 and len(audio_float) > frame_count:
+            channels = len(audio_float) // frame_count
+            audio_float = audio_float[:frame_count * channels]
+            audio_float = audio_float.reshape(frame_count, channels).mean(axis=1)
 
         # Store to audio file
         if self.should_store_recording:
             self.store_recording(audio_float)
         
+        # If a Leq measurement is active, process the current audio block.
+        # Once the selected duration is complete, store the final Leq value for the UI and export.
+        if self.audio_processor.leq_is_running:
+            leq_db, leq_is_complete = self.audio_processor.process_leq_measurement(audio_float)
+
+            if leq_is_complete:
+                self.latest_leq_db = float(leq_db)
+                self.latest_leq_is_complete = True
+                print(f"Leq complete: {self.latest_leq_db:.2f} dB")
+            else:
+                self.latest_leq_is_complete = False
+
         # Compute audio metrics
         self.latest_raw_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
         self.latest_spl_db = float(self.latest_raw_spl_db + self.calibration_offset_db)
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
 
-        # Compute filterband levels and A-weighting
-        filtered_signals = self.audio_processor.apply_filterbank(audio_float, self.filterbank)
+        # Compute filterband levels and A-weighting (only active number of bands)
+        active_filterbank = self.filterbank[:self.num_bands]
+        filtered_signals = self.audio_processor.apply_filterbank(audio_float, active_filterbank)
         self.latest_filterband_spl_db = [
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
@@ -108,37 +162,156 @@ class AudioDeviceManager:
         self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals)))
 
         # Time weighting
-        self.latest_fast_state = float(self.audio_processor.compute_fast_state(audio_float))
-        self.latest_slow_state = float(self.audio_processor.compute_slow_state(audio_float))
-        
-        # Process Leq measurement if one is currently running.
-        if self.audio_processor.leq_is_running:
-            leq_db, leq_is_complete = self.audio_processor.process_leq_measurement(audio_float)
+        fast_db = self.audio_processor.compute_fast_state(audio_float)
+        slow_db = self.audio_processor.compute_slow_state(audio_float)
 
-            if leq_is_complete:
-                self.latest_leq_db = float(leq_db)
-                self.latest_leq_is_complete = True
-            else:
-                self.latest_leq_is_complete = False
+        self.latest_fast_state = float(fast_db + self.calibration_offset_db)
+        self.latest_slow_state = float(slow_db + self.calibration_offset_db)
 
-        # Output raw data
-        # print(f"RMS: {self.latest_rms:.2f}, SPL: {self.latest_spl_db:.2f} dB,"
-        #       f"Peak: {self.latest_peak:.2f}, Time Weighted: {self.latest_time_weighted_value:.2f}")
+        # Store timestamped measurement values for JSON export.
+        self._store_measurement_history_sample()
         
         return (in_data, pyaudio.paContinue)
     
-    def calibrate_microphone(self, reference_db):
-        """Calculate calibration offset from the current detected SPL."""
-        self.calibration_offset_db = float(reference_db) - self.latest_raw_spl_db
+    def calibrate_microphone(self, reference_db=94.0, threshold_db=50.0):
+        """Start microphone calibration using the 1 kHz octave band."""
+        self.calibration_reference_db = float(reference_db)
+        self.calibration_threshold_db = float(threshold_db)
+
+        self.is_calibrating = True
+        # Wait 5s to start
+        self.calibration_status = (
+            f"Waiting for 1 kHz signal above {self.calibration_threshold_db:.1f} dB..."
+        )
+
+        self.calibration_started_at = time.time()
+        self.calibration_measurement_started = False
+        self.calibration_power_sum = 0.0
+        self.calibration_sample_count = 0
+        self.calibration_measured_db = None
+        self.latest_calibration_band_spl_db = 0.0
         
         return {
-            "reference_db": float(reference_db),
-            "measured_db": self.latest_raw_spl_db,
-            "offset_db": self.calibration_offset_db,
+            "status": "started",
+            "message": self.calibration_status,
+            "reference_db": self.calibration_reference_db,
+            "threshold_db": self.calibration_threshold_db,
         }
+    
+    def _process_microphone_calibration(self, audio_float):
+        """Process calibration using the 1 kHz octave band."""
+        if not self.is_calibrating:
+            return
+
+        now = time.time()
+
+        sos_1khz = self.filterbank[self.calibration_band_index]
+        filtered_1khz, band_spl_db = self.audio_processor.compute_filtered_band_spl_db(
+            audio_float,
+            sos_1khz
+        )
+
+        self.latest_calibration_band_spl_db = float(band_spl_db)
+
+        # Step 1: wait for 1 kHz signal above threshold
+        if not self.calibration_measurement_started:
+            if band_spl_db >= self.calibration_threshold_db:
+                self.calibration_measurement_started = True
+                self.calibration_power_sum = 0.0
+                self.calibration_sample_count = 0
+                self.calibration_status = "1 kHz signal detected. Measuring for 1 second..."
+            elif now - self.calibration_started_at >= self.calibration_timeout_s:
+                self.is_calibrating = False
+                self.calibration_status = "Calibration failed: no 1 kHz signal detected."
+                return
+            else:
+                return
+
+        # Step 2: collect exactly 1 second of filtered 1 kHz signal
+        required_samples = int(self.sample_rate * self.calibration_duration_s)
+        remaining_samples = required_samples - self.calibration_sample_count
+
+        block = filtered_1khz[:remaining_samples]
+
+        self.calibration_power_sum += float(
+            np.sum(block.astype(np.float64) ** 2)
+        )
+        self.calibration_sample_count += len(block)
+
+        # Step 3: finish calibration
+        if self.calibration_sample_count >= required_samples:
+            mean_square = self.calibration_power_sum / max(1, self.calibration_sample_count)
+            measured_db = self.audio_processor.mean_square_to_spl_db(mean_square)
+
+            self.calibration_measured_db = float(measured_db)
+            self.calibration_offset_db = float(self.calibration_reference_db - measured_db)
+
+            self.is_calibrating = False
+            self.calibration_status = (
+                f"Calibration complete. "
+                f"Measured: {measured_db:.2f} dB, "
+                f"Offset: {self.calibration_offset_db:.2f} dB"
+            )
+    
+    def _store_measurement_history_sample(self):
+        """
+        Store one timestamped measurement sample for JSON export.
+
+        The values are stored once per second instead of every audio callback.
+        """
+        if self._measurement_start_time is None:
+            return
+
+        now = time.monotonic()
+
+        if now - self._last_history_sample_time < self.measurement_history_interval_seconds:
+            return
+
+        elapsed_seconds = now - self._measurement_start_time
+
+        sample = {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "elapsed_seconds": round(elapsed_seconds, 3),
+
+            "z_weighted_spl_db": self._safe_float(self.latest_spl_db),
+            "raw_spl_db": self._safe_float(getattr(self, "latest_raw_spl_db", None)),
+            "rms": self._safe_float(self.latest_rms),
+            "peak": self._safe_float(self.latest_peak),
+            "a_weighted_spl_db": self._safe_float(self.latest_a_weighted_spl_db),
+
+            "fast_db": self._safe_float(self.latest_fast_state),
+            "slow_db": self._safe_float(self.latest_slow_state),
+
+            "peak_linear": self._safe_float(self.latest_peak),
+            "peak_dbfs": self._safe_float(self._linear_to_dbfs(self.latest_peak)),
+        }
+
+        self.measurement_history.append(sample)
+        self._last_history_sample_time = now
+
+    # Gives back the dBFS (fulls sclae digital signal) value. used for the peak:dBFS in the export
+    def _linear_to_dbfs(self, value):
+        if value is None or value <= 0:
+            return None
+        return 20 * np.log10(value)
+
+    def _safe_float(self, value):
+        if value is None:
+            return None
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     def start_recording(self):
         """Start recording from the microphone"""
+
+        # Reset exported measurement history for the new measurement.
+        self.measurement_history = []
+        self._last_history_sample_time = 0.0
+        self._measurement_start_time = time.monotonic()
+
         try:
             self.is_recording = True
             print(f"Starting recording at {self.sample_rate} Hz...")
@@ -209,6 +382,30 @@ class AudioDeviceManager:
         print(f"Storing recorded audio to file: {file_name}")
         all_recording_data = np.concatenate(self.recording_data_blocks).ravel()
         wf.write(file_name, self.sample_rate, all_recording_data)
+        self._cleanup_old_recordings()
+
+    def _cleanup_old_recordings(self):
+        """Delete oldest recordings if total size exceeds 1.6 GB."""
+        wav_files = glob.glob(os.path.join(self.recordings_dir, "*.wav"))
+        if not wav_files:
+            return
+
+        total_size = sum(os.path.getsize(f) for f in wav_files)
+        if total_size <= self.max_recordings_size_bytes:
+            return
+
+        # Sort by modification time, oldest first
+        wav_files.sort(key=lambda f: os.path.getmtime(f))
+
+        while wav_files and total_size > self.max_recordings_size_bytes:
+            oldest = wav_files.pop(0)
+            try:
+                file_size = os.path.getsize(oldest)
+                os.remove(oldest)
+                total_size -= file_size
+                print(f"Deleted old recording to free space: {oldest}")
+            except OSError as e:
+                print(f"Failed to delete old recording {oldest}: {e}")
 
     def list_devices(self):
         """List available audio devices"""
@@ -236,6 +433,14 @@ class AudioDeviceManager:
         """Set the audio device index to use for recording"""
         self.device_index = index
         self.num_channels = self.get_num_channels_of_current_device()
+
+    def set_num_bands(self, num_bands):
+        """Set the number of filterbank bands to compute and display."""
+        num_bands = int(num_bands)
+        if num_bands < 1 or num_bands > len(self.filterbank):
+            raise ValueError(f"num_bands must be between 1 and {len(self.filterbank)}")
+        self.num_bands = num_bands
+        return self.num_bands
     
     def generate_noise(self, num_samples=48000):
         noise = np.random.normal(0, 1, num_samples)
