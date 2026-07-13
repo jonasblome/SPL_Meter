@@ -94,7 +94,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         </select>
         <button onclick="startLeqMeasurement()">Start Leq</button>
     </div>
-    <div class="weighting">
+    <div class="calibration">
         <strong>Calibration:</strong>
         <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
         <span>dB</span>
@@ -177,10 +177,6 @@ HTML_PAGE_TAIL = """
                 s.className = 'status stopped';
                 if (evtSource) { evtSource.close(); evtSource = null; }
             });
-        }
-
-        function setWeighting(value) {
-            fetch('/weighting', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({weighting: value})});
         }
 
         function setLeqDuration(index) {
@@ -353,12 +349,6 @@ class UIHandler:
         def stop():
             self._stop_recording_thread()
             return jsonify({"status": "stopped"})
-
-        @self.app.route("/weighting", methods=["POST"])
-        def weighting():
-            data = request.get_json()
-            device_manager.time_weighting = data.get("weighting", "Fast")
-            return jsonify({"weighting": device_manager.time_weighting})
         
         @self.app.route("/leq_duration", methods=["POST"])
         def leq_duration():
@@ -396,8 +386,6 @@ class UIHandler:
                 "status": "started",
                 "duration_seconds": duration_seconds
             })
-            device_manager.time_weighting = data.get("weighting", "Fast")
-            return jsonify({"weighting": device_manager.time_weighting})
         
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():

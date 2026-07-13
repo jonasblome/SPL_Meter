@@ -32,14 +32,9 @@ class MeasurementExporter:
                 "spl_db": self._safe_float(getattr(device_manager, "latest_spl_db", None)),
                 "rms": self._safe_float(getattr(device_manager, "latest_rms", None)),
                 "peak": self._safe_float(getattr(device_manager, "latest_peak", None)),
-                "a_weighted_spl_db": self._safe_float(
-                    getattr(device_manager, "latest_a_weighted_spl_db", None)
-                ),
+                "a_weighted_spl_db": self._safe_float(getattr(device_manager, "latest_a_weighted_spl_db", None)),
                 "fast_db": self._safe_float(getattr(device_manager, "latest_fast_state", None)),
                 "slow_db": self._safe_float(getattr(device_manager, "latest_slow_state", None)),
-                "time_weighted_db": self._safe_float(
-                    getattr(device_manager, "latest_time_weighted_value", None)
-                ),
                 "leq_db": self._safe_float(getattr(device_manager, "latest_leq_db", None)),
                 "leq_is_complete": bool(getattr(device_manager, "latest_leq_is_complete", False)),
             },
