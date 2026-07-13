@@ -3,6 +3,8 @@ import json
 import threading
 import helpers
 from flask import Flask, Response, request, jsonify
+from MeasurementExporter import MeasurementExporter
+from datetime import datetime
 
 HTML_PAGE_HEAD = """<!DOCTYPE html>
 <html lang="en">
@@ -29,6 +31,25 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         .metric-box { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .metric-label { font-size: 13px; color: #666; margin-bottom: 8px; }
         .metric-value { font-size: 28px; font-weight: bold; color: #333; }
+        .level-meter {
+            margin-top: 12px; }
+        .level-bar {
+            width: 100%;
+            height: 16px;
+            background: #ddd;
+            border-radius: 8px;
+            overflow: hidden; }
+        .level-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: #4CAF50;
+            transition: width 0.2s ease;}
+        .level-ticks {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;}
         .filterband-section { margin-top: 24px; }
         .filterband-grid { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
         .filterband-box { display: flex; flex-direction: column; align-items: center; width: 60px; }
@@ -53,13 +74,21 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     <div class="controls">
         <button id="btn-start" onclick="startMeasurement()">Start Measurement</button>
         <button id="btn-stop"  onclick="stopMeasurement()" disabled>Stop Measurement</button>
+    <div class="export">
+        <button onclick="downloadJson()">Download JSON</button>
+        </div>
     </div>
     <hr>
-    <div class="weighting">
+    <label class="store-toggle">
+        <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
+        Store Audio
+    </label>
+    <hr>
+    <div class="Leq">
         <strong>Leq Duration:</strong>
         <select id="leq-duration" onchange="setLeqDuration(this.value)">
-            <option value="0">5 s</option>
-            <option value="1" selected>10 s</option>
+            <option value="0" selected>5 s</option>
+            <option value="1">10 s</option>
             <option value="2">15 s</option>
             <option value="3">30 s</option>
             <option value="4">60 s</option>
@@ -72,7 +101,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <input type="checkbox" id="store-audio" onchange="setStoreAudio(this.checked)">
         Store Audio
     </label>
-    <div class="weighting">
+    <div class="num-bands">
         <strong>Number of Bands:</strong>
         <select id="num-bands" onchange="setNumBands(this.value)">
             <option value="4">4</option>
@@ -82,7 +111,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         </select>
         <span class="hint">More bands look nicer but need more processing power.</span>
     </div>
-    <div class="weighting">
+    <div class="calibration">
         <strong>Calibration:</strong>
         <span>Reference</span>
         <input id="reference-db" type="number" value="94" min="40" max="140" step="0.1">
@@ -104,8 +133,40 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         <div class="metric-box"><div class="metric-label">SPL</div><div class="metric-value" id="spl">-- dB</div></div>
         <div class="metric-box"><div class="metric-label">RMS</div><div class="metric-value" id="rms">--</div></div>
         <div class="metric-box"><div class="metric-label">Peak</div><div class="metric-value" id="peak">--</div></div>
-        <div class="metric-box"><div class="metric-label">Fast</div><div class="metric-value" id="fast">--</div></div>
-        <div class="metric-box"><div class="metric-label">Slow</div><div class="metric-value" id="slow">--</div></div>
+
+        <div class="metric-box">
+            <div class="metric-label">Fast</div>
+            <div class="metric-value" id="fast">-- dB</div>
+            <div class="level-meter">
+                <div class="level-bar">
+                    <div class="level-bar-fill" id="fast-bar"></div>
+                </div>
+                <div class="level-ticks">
+                    <span>30</span>
+                    <span>50</span>
+                    <span>70</span>
+                    <span>90</span>
+                    <span>110 dB</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="metric-box">
+            <div class="metric-label">Slow</div>
+            <div class="metric-value" id="slow">-- dB</div>
+            <div class="level-meter">
+                <div class="level-bar">
+                    <div class="level-bar-fill" id="slow-bar"></div>
+                </div>
+                <div class="level-ticks">
+                    <span>30</span>
+                    <span>50</span>
+                    <span>70</span>
+                    <span>90</span>
+                    <span>110 dB</span>
+                </div>
+            </div>
+        </div>
         <div class="metric-box"><div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div></div>
     </div>
     <hr>
@@ -157,10 +218,6 @@ HTML_PAGE_TAIL = """
             });
         }
 
-        function setWeighting(value) {
-            fetch('/weighting', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({weighting: value})});
-        }
-
         function setLeqDuration(index) {
             fetch('/leq_duration', {
                 method: 'POST',
@@ -201,6 +258,7 @@ HTML_PAGE_TAIL = """
                 startSSE();
             });
         }
+
         function setStoreAudio(checked) {
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
         }
@@ -226,6 +284,28 @@ HTML_PAGE_TAIL = """
 
         // Apply initial visibility on page load
         updateBandVisibility(Number(document.getElementById('num-bands').value));
+        function downloadJson() {
+            window.location.href = '/export_json';
+        }
+
+        function dbToPercent(db, minDb = 20, maxDb = 130) {
+            if (typeof db !== 'number' || !Number.isFinite(db)) {
+                return 0;
+            }
+
+            const clamped = Math.max(minDb, Math.min(maxDb, db));
+            return ((clamped - minDb) / (maxDb - minDb)) * 100;
+        }
+
+        function updateLevelBar(barId, db) {
+            const bar = document.getElementById(barId);
+
+            if (!bar) {
+                return;
+            }
+
+            bar.style.width = dbToPercent(db).toFixed(1) + '%';
+        }
 
         function startSSE() {
             if (evtSource) evtSource.close();
@@ -237,8 +317,23 @@ HTML_PAGE_TAIL = """
                 document.getElementById('spl').textContent  = d.spl_db.toFixed(2) + ' dB';
                 document.getElementById('rms').textContent  = d.rms.toFixed(2);
                 document.getElementById('peak').textContent = d.peak.toFixed(2);
-                document.getElementById('fast').textContent = d.fast.toFixed(2);
-                document.getElementById('slow').textContent = d.slow.toFixed(2);
+
+                if (d.fast !== null && d.fast !== undefined) {
+                    document.getElementById('fast').textContent = d.fast.toFixed(2) + ' dB';
+                    updateLevelBar('fast-bar', d.fast);
+                } else {
+                    document.getElementById('fast').textContent = '-- dB';
+                    updateLevelBar('fast-bar', null);
+                }
+
+                if (d.slow !== null && d.slow !== undefined) {
+                    document.getElementById('slow').textContent = d.slow.toFixed(2) + ' dB';
+                    updateLevelBar('slow-bar', d.slow);
+                } else {
+                    document.getElementById('slow').textContent = '-- dB';
+                    updateLevelBar('slow-bar', null);
+                }
+
                 if (d.leq_is_running) {
                     document.getElementById('leq').textContent = 'running...';
                 } else if (d.leq_db !== null) {
@@ -280,39 +375,30 @@ class UIHandler:
         self.leq_duration_index = 0
 
         self.audio_device_manager = audio_device_manager
+
+        # Available Leq measurement durations in seconds.
+        # The selected index can later be controlled by the web UI.
+        self.leq_durations_seconds = [5, 10, 15, 30, 60, 300]
+        self.leq_duration_index = 0
+        
+        self.measurement_exporter = MeasurementExporter()
         self.recording_thread = None
         self.app = Flask(__name__)
         self._register_routes()
         self.host = host
         self.port = port
 
+
     def get_leq_duration_seconds(self):
         """Return the currently selected Leq measurement duration in seconds."""
         return self.leq_durations_seconds[self.leq_duration_index]
-
-    def cycle_leq_duration(self):
-        """
-        Select the next Leq duration.
-
-        This can later be connected to a UI button.
-        Example: 5 s -> 10 s -> 15 s -> ... -> 5 s
-        """
-        self.leq_duration_index += 1
-        self.leq_duration_index %= len(self.leq_durations_seconds)
-
-        return self.get_leq_duration_seconds()
     
     def set_leq_duration_index(self, index):
-        """
-        Select a Leq duration by index.
-
-        This is mainly useful for tests or direct UI selection.
-        """
+        """Select a Leq duration by index."""
         if index < 0 or index >= len(self.leq_durations_seconds):
             raise ValueError("Invalid Leq duration index")
 
         self.leq_duration_index = index
-
         return self.get_leq_duration_seconds()
 
     def _get_html_page(self):
@@ -344,12 +430,6 @@ class UIHandler:
         def stop():
             self._stop_recording_thread()
             return jsonify({"status": "stopped"})
-
-        @self.app.route("/weighting", methods=["POST"])
-        def weighting():
-            data = request.get_json()
-            device_manager.time_weighting = data.get("weighting", "Fast")
-            return jsonify({"weighting": device_manager.time_weighting})
         
         @self.app.route("/leq_duration", methods=["POST"])
         def leq_duration():
@@ -387,6 +467,7 @@ class UIHandler:
                 "status": "started",
                 "duration_seconds": duration_seconds
             })
+        
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():
             if not device_manager.is_recording:
@@ -400,6 +481,7 @@ class UIHandler:
 
             result = device_manager.calibrate_microphone(reference_db, threshold_db)
             return jsonify(result)
+        
         @self.app.route("/store_recording", methods=["POST"])
         def store_recording():
             data = request.get_json()
@@ -444,6 +526,31 @@ class UIHandler:
                     yield f"data: {payload}\n\n"
                     time.sleep(0.0167)  # ~60 Hz update rate
             return Response(event_generator(), mimetype="text/event-stream")
+        
+        @self.app.route("/export_json", methods=["GET"])
+        def export_json():
+            if hasattr(self, "leq_durations_seconds") and hasattr(self, "leq_duration_index"):
+                leq_duration_seconds = self.leq_durations_seconds[self.leq_duration_index]
+            else:
+                leq_duration_seconds = None
+
+            measurement_data = self.measurement_exporter.create_measurement_snapshot(
+                device_manager,
+                leq_duration_seconds=leq_duration_seconds
+            )
+
+            json_string = self.measurement_exporter.to_json_string(measurement_data)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"spl_measurement_{timestamp}.json"
+
+            return Response(
+                json_string,
+                mimetype="application/json",
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}"
+                }
+            )
 
     def _start_recording_thread(self):
         if self.recording_thread is None or not self.recording_thread.is_alive():
