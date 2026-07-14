@@ -97,7 +97,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         </select>
         <span class="hint">More bands look nicer but need more processing power.</span>
     </div>
-
+    
     <hr>
 
     <div class="calibration">
@@ -119,7 +119,7 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             <span id="calibration-status">Not calibrated</span>
         </div>
     </div>
-    
+
     <hr>
     
     <div class="controls">

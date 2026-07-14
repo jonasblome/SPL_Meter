@@ -100,6 +100,7 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
+        # self.recordings_dir = "./"
         self.recordings_dir = "/home/teamrapsberry/recordings_local"
         os.makedirs(self.recordings_dir, exist_ok=True)
 
@@ -119,7 +120,7 @@ class AudioDeviceManager:
         audio_float = audio_data.astype(np.float32) / 8388608.0
         
         # Process microphone calibration if active
-        self._process_microphone_calibration(audio_float)
+        self.process_microphone_calibration(audio_float)
         
         # Convert multi-channel audio to mono before SPL/Leq processing.
         # PyAudio's frame_count is the number of time samples per channel.
@@ -197,7 +198,7 @@ class AudioDeviceManager:
             "threshold_db": self.calibration_threshold_db,
         }
     
-    def _process_microphone_calibration(self, audio_float):
+    def process_microphone_calibration(self, audio_float):
         """Process calibration using the 1 kHz octave band."""
         if not self.is_calibrating:
             return
