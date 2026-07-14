@@ -225,4 +225,4 @@ __marimo__/
 # Presnetation/
 
 # Stored Recordings
-.wav
+*.wav
