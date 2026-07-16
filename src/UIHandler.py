@@ -22,8 +22,36 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         #btn-stop  { background: #f44336; color: white; }
         #btn-start:disabled, #btn-stop:disabled { opacity: 0.4; cursor: default; }
         #calibration-div  { margin: 20px 0px; }
-        #leq-div  { margin: 20px 0px; }
-        #leq-result { width: 100px }
+        #leq-div {
+            margin: 20px 0px;
+        }
+
+        .leq-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 20px 0 16px 0;
+        }
+
+        .leq-results {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(140px, 180px));
+            gap: 16px;
+            margin-top: 12px;
+        }
+
+        #leq-result,
+        #laeq-result {
+            width: auto;
+            min-height: 86px;
+        }
+
+        @media (max-width: 500px) {
+            .leq-results {
+                grid-template-columns: 1fr;
+            }
+        }
         .store-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 16px; cursor: pointer; }
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
@@ -136,23 +164,35 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     
     <hr>
     
-    <div class="Leq" id="leq-div">
-        <strong>Leq Duration:</strong>
-        <select id="leq-duration" onchange="setLeqDuration(this.value)">
-            <option value="0" selected>5 s</option>
-            <option value="1">10 s</option>
-            <option value="2">15 s</option>
-            <option value="3">30 s</option>
-            <option value="4">60 s</option>
-            <option value="5">300 s</option>
-        </select>
+    <div class="leq-section" id="leq-div">
+    <div class="leq-controls">
+        <div>
+            <strong>Leq Duration:</strong>
+            <select id="leq-duration" onchange="setLeqDuration(this.value)">
+                <option value="0" selected>5 s</option>
+                <option value="1">10 s</option>
+                <option value="2">15 s</option>
+                <option value="3">30 s</option>
+                <option value="4">60 s</option>
+                <option value="5">300 s</option>
+            </select>
+        </div>
+
+        <button onclick="startLeqMeasurement()">Start Leq / LAeq</button>
     </div>
-    <div id="leq-div">
-        <button onclick="startLeqMeasurement()">Start Leq</button>
+
+    <div class="leq-results">
+        <div class="metric-box" id="leq-result">
+            <div class="metric-label">Leq</div>
+            <div class="metric-value" id="leq">--</div>
+        </div>
+
+        <div class="metric-box" id="laeq-result">
+            <div class="metric-label">LAeq</div>
+            <div class="metric-value" id="laeq">--</div>
+        </div>
     </div>
-    <div class="metric-box" id="leq-result">
-        <div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div>
-    </div>
+
     
     <hr>
     
@@ -291,6 +331,7 @@ HTML_PAGE_TAIL = """
         function startLeqMeasurement() {
             fetch('/leq_start', {method: 'POST'}).then(() => {
                 document.getElementById('leq').textContent = 'running...';
+                document.getElementById('laeq').textContent = 'running...';
                 startSSE();
             });
         }
@@ -415,6 +456,11 @@ HTML_PAGE_TAIL = """
                 } else if (d.leq_db !== null) {
                     document.getElementById('leq').textContent = d.leq_db.toFixed(2) + ' dB';
                 }
+                if (d.laeq_is_running) {
+                    document.getElementById('laeq').textContent = 'running...';
+                } else if (d.laeq_db !== null && d.laeq_db !== undefined) {
+                    document.getElementById('laeq').textContent = d.laeq_db.toFixed(2) + ' dB';
+                }
                 if (d.calibration) {
                     let calibrationText = d.calibration.status;
 
@@ -457,7 +503,7 @@ class UIHandler:
         self.leq_durations_seconds = [5, 10, 15, 30, 60, 300]
         self.leq_duration_index = 0
         
-        self.measurement_exporter = MeasurementExporter()
+        self.measurement_exporter = MeasurementExporter(decimal_places=2)
         self.recording_thread = None
         self.app = Flask(__name__)
         self._register_routes()
@@ -531,8 +577,15 @@ class UIHandler:
 
             device_manager.latest_leq_db = None
             device_manager.latest_leq_is_complete = False
+            device_manager.latest_laeq_db = None
+            device_manager.latest_laeq_is_complete = False
 
             device_manager.audio_processor.start_leq_measurement(
+                duration_seconds=duration_seconds,
+                sample_rate=device_manager.sample_rate
+            )
+
+            device_manager.audio_processor.start_laeq_measurement(
                 duration_seconds=duration_seconds,
                 sample_rate=device_manager.sample_rate
             )
@@ -589,6 +642,10 @@ class UIHandler:
                         "leq_db":             device_manager.latest_leq_db,
                         "leq_is_complete":    device_manager.latest_leq_is_complete,
                         "leq_is_running":     device_manager.audio_processor.leq_is_running,
+                        # LAeq values for the web UI
+                        "laeq_db":            device_manager.latest_laeq_db,
+                        "laeq_is_complete":   device_manager.latest_laeq_is_complete,
+                        "laeq_is_running":    device_manager.audio_processor.laeq_is_running,
                         "calibration": {
                         "active": device_manager.is_calibrating,
                         "status": device_manager.calibration_status,

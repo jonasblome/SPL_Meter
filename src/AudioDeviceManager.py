@@ -55,6 +55,10 @@ class AudioDeviceManager:
         self.latest_peak = 0.0
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
+        # Latest LAeq values used by the UI stream and JSON export.
+        # LAeq is the equivalent continuous level of the A-weighted signal.
+        self.latest_laeq_db = None
+        self.latest_laeq_is_complete = False
 
         # Prepare filterbank in advance to only calculate once
         self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
@@ -161,6 +165,22 @@ class AudioDeviceManager:
         ]
         self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals)))
 
+        # If a LAeq measurement is active, process the current A-weighted audio block.
+        # LAeq is calculated from A-weighted signal energy, not by averaging A-weighted dB values.
+        if self.audio_processor.laeq_is_running:
+            a_weighted_signal = self.audio_processor.compute_a_weighted_signal(filtered_signals)
+
+            laeq_db, laeq_is_complete = self.audio_processor.process_laeq_measurement(
+                a_weighted_signal
+            )
+
+            if laeq_is_complete:
+                self.latest_laeq_db = float(laeq_db)
+                self.latest_laeq_is_complete = True
+                print(f"LAeq complete: {self.latest_laeq_db:.2f} dB")
+            else:
+                self.latest_laeq_is_complete = False
+
         # Time weighting
         fast_db = self.audio_processor.compute_fast_state(audio_float)
         slow_db = self.audio_processor.compute_slow_state(audio_float)
@@ -257,7 +277,10 @@ class AudioDeviceManager:
         """
         Store one timestamped measurement sample for JSON export.
 
-        The values are stored once per second instead of every audio callback.
+        The audio callback runs many times per second. For the export, we only
+        store one reduced measurement sample at the configured history interval.
+        Filterband values are stored in the same order as the top-level
+        filterband center frequencies in the JSON export.
         """
         if self._measurement_start_time is None:
             return
@@ -271,29 +294,28 @@ class AudioDeviceManager:
 
         sample = {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "elapsed_seconds": round(elapsed_seconds, 3),
+            "elapsed_seconds": elapsed_seconds,
 
-            "z_weighted_spl_db": self._safe_float(self.latest_spl_db),
+            "spl_db": self._safe_float(self.latest_spl_db),
             "raw_spl_db": self._safe_float(getattr(self, "latest_raw_spl_db", None)),
             "rms": self._safe_float(self.latest_rms),
             "peak": self._safe_float(self.latest_peak),
-            "a_weighted_spl_db": self._safe_float(self.latest_a_weighted_spl_db),
 
+            "a_weighted_spl_db": self._safe_float(self.latest_a_weighted_spl_db),
             "fast_db": self._safe_float(self.latest_fast_state),
             "slow_db": self._safe_float(self.latest_slow_state),
 
-            "peak_linear": self._safe_float(self.latest_peak),
-            "peak_dbfs": self._safe_float(self._linear_to_dbfs(self.latest_peak)),
+            # Filterband SPL values for this timestamp.
+            # The corresponding center frequencies are stored once in
+            # export["filterbands"]["center_frequency_hz"].
+            "filterband_spl_db": [
+                self._safe_float(value)
+                for value in getattr(self, "latest_filterband_spl_db", [])
+            ],
         }
 
         self.measurement_history.append(sample)
         self._last_history_sample_time = now
-
-    # Gives back the dBFS (fulls sclae digital signal) value. used for the peak:dBFS in the export
-    def _linear_to_dbfs(self, value):
-        if value is None or value <= 0:
-            return None
-        return 20 * np.log10(value)
 
     def _safe_float(self, value):
         if value is None:
