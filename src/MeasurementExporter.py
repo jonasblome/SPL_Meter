@@ -5,7 +5,14 @@ from numbers import Integral, Real
 
 
 class MeasurementExporter:
-    """Creates export files from the latest SPL meter measurement values."""
+    """
+    Creates structured JSON exports for SPL meter measurements.
+
+    The exporter collects the latest measurement results, setup metadata,
+    filterband metadata and the timestamped measurement history from the
+    device manager. Numeric float values are rounded centrally so the export
+    precision can be configured without changing the measurement code.
+    """
 
     def __init__(self, decimal_places=2):
         """
@@ -19,10 +26,16 @@ class MeasurementExporter:
 
     def create_measurement_snapshot(self, device_manager, leq_duration_seconds=None):
         """
-        Create a dictionary containing the current measurement state.
+        Create the complete JSON export structure for the current measurement.
 
-        The returned structure contains setup metadata, latest result values,
-        filterband metadata and a timestamped measurement history.
+        The snapshot contains:
+        - measurement_setup: sample rate, chunk size and Leq duration
+        - results: latest or final measurement values
+        - filterbands: center frequencies and metadata for band values
+        - time_series: timestamped measurement samples collected during runtime
+
+        Filterband SPL values over time are stored inside each time_series entry.
+        Their order corresponds to filterbands["center_frequency_hz"].
         """
         snapshot = {
             "schema_version": "1.0",
@@ -53,16 +66,18 @@ class MeasurementExporter:
                 "leq_is_complete": bool(
                     getattr(device_manager, "latest_leq_is_complete", False)
                 ),
-
-                # Keep this if LAeq exists in your current code.
                 "laeq_db": self._safe_float(getattr(device_manager, "latest_laeq_db", None)),
                 "laeq_is_complete": bool(
                     getattr(device_manager, "latest_laeq_is_complete", False)
                 ),
             },
 
+            # Store filterband frequencies once. The corresponding values are stored
+            # per timestamp in time_series[*]["filterband_spl_db"].
             "filterbands": self._filterband_metadata(),
 
+            # The history is collected by AudioDeviceManager during the measurement.
+            # It contains reduced timestamped samples instead of every audio block.
             "time_series": list(getattr(device_manager, "measurement_history", [])),
         }
 
@@ -130,37 +145,3 @@ class MeasurementExporter:
             return float(value)
         except (TypeError, ValueError):
             return None
-
-    def _safe_list(self, values):
-        """Convert a list of numeric values to JSON-safe floats."""
-        if values is None:
-            return []
-
-        return [self._safe_float(value) for value in values]
-    
-    def _safe_filterbands(self, values):
-            """Return filterband center frequencies and SPL values in a compact table-like structure."""
-            if values is None:
-                values = []
-
-            frequencies = list(helpers.frequency_weights_octave.keys())
-
-            return {
-                "center_frequency_hz": [
-                    float(frequency)
-                    for frequency, _ in zip(frequencies, values)
-                ],
-                "spl_db": [
-                    self._round_float(value)
-                    for value in values[:len(frequencies)]
-                ]
-            }
-    
-    def _round_float(self, value, decimals=2):
-        """Convert numeric values to rounded Python floats for readable JSON export."""
-        safe_value = self._safe_float(value)
-
-        if safe_value is None:
-            return None
-
-        return round(safe_value, decimals)

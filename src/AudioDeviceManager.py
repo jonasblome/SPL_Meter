@@ -23,7 +23,14 @@ from datetime import datetime
 
 
 class AudioDeviceManager:
-    """Manages ICS43434 I2S microphone audio input and processing"""
+    """
+    Manages real-time audio input and stores the latest measurement values.
+
+    The class opens the microphone stream, receives audio blocks in the
+    PyAudio callback and updates the values used by the Web UI and JSON
+    export. It also handles calibration, optional WAV recording, Leq/LAeq
+    processing and timestamped measurement history.
+    """
     
     def __init__(self, audio_processor, sample_rate=48000, chunk_size=1024, device_index=0):
         """
@@ -53,6 +60,8 @@ class AudioDeviceManager:
         self.latest_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_peak = 0.0
+
+        # Latest Leq values used by the UI stream and JSON export.
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
         # Latest LAeq values used by the UI stream and JSON export.
@@ -88,10 +97,6 @@ class AudioDeviceManager:
         # Time weighting
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
-
-        # Latest Leq values used by the UI stream and JSON export.
-        self.latest_leq_db = None
-        self.latest_leq_is_complete = False
 
         # Time series of measurement values for JSON export.
         # One entry is stored approximately once per second during recording.
@@ -181,7 +186,8 @@ class AudioDeviceManager:
             else:
                 self.latest_laeq_is_complete = False
 
-        # Time weighting
+        # Compute Fast and Slow time-weighted levels.
+        # Both values are returned in dB SPL and then shifted by the calibration offset.
         fast_db = self.audio_processor.compute_fast_state(audio_float)
         slow_db = self.audio_processor.compute_slow_state(audio_float)
 

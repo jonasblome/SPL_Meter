@@ -4,6 +4,14 @@ from scipy import signal
 
 class AudioProcessor:
     def __init__(self, sample_rate=48000):
+        """
+        Contains the main signal-processing functions for the SPL meter.
+
+        The class provides basic sound metrics such as RMS, Peak and SPL,
+        time-weighted levels such as Fast and Slow, equivalent sound levels
+        such as Leq and LAeq, and helper functions for filterbank-based
+        A-weighting.
+        """
         print("AudioProcessor: Initializing")
 
         self.sample_rate = sample_rate
@@ -212,65 +220,7 @@ class AudioProcessor:
         )
 
         return self.compute_time_weighted_db(self.slow_state)
-    
 
-    def reset_leq_measurement(self):
-        """Reset all internal values used for Leq measurement."""
-        self.leq_sum_square = 0.0
-        self.leq_sample_count = 0
-        self.leq_target_sample_count = 0
-
-        self.leq_duration_seconds = None
-        self.leq_sample_rate = None
-
-        self.leq_is_running = False
-        self.leq_result_db = None
-
-    def start_leq_measurement(self, duration_seconds, sample_rate):
-        """
-        Start a new fixed-duration Leq measurement.
-        """
-        if duration_seconds <= 0:
-            raise ValueError("duration_seconds must be greater than zero")
-
-        if sample_rate <= 0:
-            raise ValueError("sample_rate must be greater than zero")
-
-        self.reset_leq_measurement()
-
-        self.leq_duration_seconds = duration_seconds
-        self.leq_sample_rate = sample_rate
-        self.leq_target_sample_count = int(duration_seconds * sample_rate)
-
-        self.leq_is_running = True
-        self.leq_result_db = None
-
-    
-    def process_leq_measurement(self, audio_data, reference_pressure=20e-6):
-        """
-        Process one audio block for the running Leq measurement.
-        """
-        if not self.leq_is_running:
-            raise RuntimeError("Leq measurement has not been started.")
-
-        remaining_samples = self.leq_target_sample_count - self.leq_sample_count
-        audio_data = audio_data[:remaining_samples]
-
-        self.leq_sum_square += np.sum(audio_data**2)
-        self.leq_sample_count += len(audio_data)
-
-        if self.leq_sample_count < self.leq_target_sample_count:
-            return None, False
-
-        self.leq_is_running = False
-
-        if self.leq_sample_count == 0 or self.leq_sum_square == 0:
-            self.leq_result_db = -np.inf
-        else:
-            mean_square = self.leq_sum_square / self.leq_sample_count
-            self.leq_result_db = 10 * np.log10(mean_square / reference_pressure**2)
-
-        return self.leq_result_db, True
     
     def reset_laeq_measurement(self):
         """Reset all internal values used for LAeq measurement."""
@@ -315,11 +265,13 @@ class AudioProcessor:
         """
         Process one A-weighted audio block for the running LAeq measurement.
 
-        LAeq is the A-weighted equivalent continuous sound level.
-        The function expects an already A-weighted time-domain signal.
-        It returns:
-        - (None, False) while the measurement is still running
-        - (laeq_result_db, True) when the selected duration is complete
+        LAeq is calculated like Leq, but the input signal is A-weighted before
+        the energetic average is calculated. The function does not average
+        A-weighted dB values directly.
+
+        Returns:
+            tuple: (None, False) while running, or (laeq_result_db, True)
+            when the selected duration is complete.
         """
         if not self.laeq_is_running:
             raise RuntimeError("LAeq measurement has not been started.")
