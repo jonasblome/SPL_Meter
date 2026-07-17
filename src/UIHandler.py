@@ -490,6 +490,13 @@ HTML_PAGE_TAIL = """
 class UIHandler:
     def __init__(self, audio_device_manager=None, host="0.0.0.0", port=8501):
         print("UIHandler: Initializing")
+        #new stand for calibration
+        self.calibration_cleanup_thread = None
+        self.calibration_owns_recording = False
+        # Available Leq measurement durations in seconds.
+        # The UI can select one of these values by changing leq_duration_index.
+        self.leq_durations_seconds = [5, 10, 15, 30, 60, 300]
+        self.leq_duration_index = 0
 
         self.audio_device_manager = audio_device_manager
 
@@ -608,16 +615,26 @@ class UIHandler:
         
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():
+            started_for_calibration = False
+
+            # Calibration needs live audio. Start it automatically when necessary.
             if not device_manager.is_recording:
-                return jsonify({
-                    "error": "Start measurement before calibration."
-                }), 400
+                self.calibration_owns_recording = True
+                started_for_calibration = True
+                self._start_recording_thread()
+            else:
+                self.calibration_owns_recording = False
 
             data = request.get_json() or {}
             reference_db = float(data.get("reference_db", 94.0))
             threshold_db = float(data.get("threshold_db", 50.0))
 
             result = device_manager.calibrate_microphone(reference_db, threshold_db)
+
+            if started_for_calibration:
+                self._start_calibration_cleanup_thread()
+
+            result["recording_started_for_calibration"] = started_for_calibration
             return jsonify(result)
         
         @self.app.route("/store_recording", methods=["POST"])
@@ -637,7 +654,10 @@ class UIHandler:
         @self.app.route("/stream")
         def stream():
             def event_generator():
-                while device_manager.is_recording:
+                while (
+                    device_manager.is_recording
+                    or device_manager.is_calibrating
+                ):
                     payload = json.dumps({
                         # Basic live values
                         "spl_db":        device_manager.latest_spl_db,
@@ -673,6 +693,13 @@ class UIHandler:
                 })
                     yield f"data: {payload}\n\n"
                     time.sleep(0.0167)  # ~60 Hz update rate
+            
+            response = Response(
+                event_generator(),
+                mimetype="text/event-stream"
+            )
+            response.headers["Cache-Control"] = "no-cache"
+            response.headers["X-Accel-Buffering"] = "no"
             return Response(event_generator(), mimetype="text/event-stream")
         
         @self.app.route("/export_json", methods=["GET"])
@@ -719,6 +746,23 @@ class UIHandler:
                 target=self.audio_device_manager.start_recording, daemon=True
             )
             self.recording_thread.start()
+
+    def _start_calibration_cleanup_thread(self):
+        """Stop audio processing after a standalone calibration finishes."""
+
+        def wait_for_calibration():
+            while self.audio_device_manager.is_calibrating:
+                time.sleep(0.1)
+
+            if self.calibration_owns_recording:
+                self._stop_recording_thread()
+                self.calibration_owns_recording = False
+
+        self.calibration_cleanup_thread = threading.Thread(
+            target=wait_for_calibration,
+            daemon=True
+        )
+        self.calibration_cleanup_thread.start()
 
     def _stop_recording_thread(self):
         self.audio_device_manager.stop_recording()
