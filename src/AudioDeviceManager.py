@@ -65,16 +65,19 @@ class AudioDeviceManager:
         # Latest Leq values used by the UI stream and JSON export.
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
+
         # Latest LAeq values used by the UI stream and JSON export.
         # LAeq is the equivalent continuous level of the A-weighted signal.
         self.latest_laeq_db = None
         self.latest_laeq_is_complete = False
 
         # Prepare filterbank in advance to only calculate once
+        self.octave_filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
+        self.third_octave_filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=False)
         self.show_third_octave_bands = False
-        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=self.show_third_octave_bands)
-        self.num_bands = len(self.filterbank)
-        self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
+        self.active_filterbank_freqs = list(helpers.frequency_weights_octave.keys())
+        self.num_bands = len(self.octave_filterbank)
+        self.latest_filterband_spl_db = [0.0] * len(self.octave_filterbank)
         self.latest_a_weighted_spl_db = 0.0
        
         # Calibration
@@ -164,13 +167,14 @@ class AudioDeviceManager:
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float) + self.calibration_offset_rms)
 
         # Compute filterband levels and A-weighting (only active number of bands)
-        active_filterbank = self.filterbank[:self.num_bands]
+        active_filterbank = self.third_octave_filterbank[:self.num_bands] if self.show_third_octave_bands else self.octave_filterbank[:self.num_bands]
+        self.active_filterbank_freqs = list(helpers.frequency_weights_3rd_octave.keys()) if self.show_third_octave_bands else list(helpers.frequency_weights_octave.keys())
         filtered_signals = self.audio_processor.apply_filterbank(audio_float, active_filterbank)
         self.latest_filterband_spl_db = [
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
         ]
-        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals, self.show_third_octave_bands) + self.calibration_offset_db))
+        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals, not self.show_third_octave_bands) + self.calibration_offset_db))
 
         # If a LAeq measurement is active, process the current A-weighted audio block.
         # LAeq is calculated from A-weighted signal energy, not by averaging A-weighted dB values.
@@ -233,7 +237,7 @@ class AudioDeviceManager:
 
         now = time.time()
 
-        sos_1khz = self.filterbank[self.calibration_band_index]
+        sos_1khz = self.octave_filterbank[self.calibration_band_index]
         filtered_1khz, band_spl_db = self.audio_processor.compute_filtered_band_spl_db(
             audio_float,
             sos_1khz
@@ -436,10 +440,6 @@ class AudioDeviceManager:
             except OSError as e:
                 print(f"Failed to delete old recording {oldest}: {e}")
 
-    def set_third_octave_bands(self, show_third_octave_bands):
-        self.show_third_octave_bands = show_third_octave_bands
-        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=self.show_third_octave_bands)
-
     def list_devices(self):
         """List available audio devices"""
         audio = pyaudio.PyAudio()
@@ -470,7 +470,10 @@ class AudioDeviceManager:
     def set_num_bands(self, num_bands):
         """Set the number of filterbank bands to compute and display."""
         num_bands = int(num_bands)
-        if num_bands < 1 or num_bands > len(self.filterbank):
-            raise ValueError(f"num_bands must be between 1 and {len(self.filterbank)}")
+        valid_num_bands = len(self.third_octave_filterbank) if self.show_third_octave_bands else len(self.octave_filterbank)
+
+        if num_bands < 1 or num_bands > valid_num_bands:
+            raise ValueError(f"num_bands must be between 1 and {valid_num_bands}")
+        
         self.num_bands = num_bands
         return self.num_bands
