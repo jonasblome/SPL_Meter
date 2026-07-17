@@ -189,27 +189,56 @@ python3 src/main.py --simulate /home/teamrapsberry/testsignal.wav
 
 Die Oberfläche zeigt folgende Bereiche an:
 
+Die Oberfläche zeigt folgende Bedienbereiche an:
+
 | Bereich | Bedeutung |
 |---|---|
-| **Start / Stop Measurement** | Mikrofonaufnahme starten oder stoppen |
-| **Leq Duration** | Messdauer für eine Leq-Messung auswählen (5 s, 10 s, 15 s, 30 s, 60 s, 300 s) |
-| **Start Leq** | Eine integrierte Leq-Messung über die gewählte Dauer starten |
+| **Start / Stop Measurement** | Startet oder stoppt die Live-Messung über das Mikrofon |
+| **Leq Duration** | Legt die Messdauer für Leq und LAeq fest |
+| **Start Leq / LAeq** | Startet eine Leq- und LAeq-Messung über die gewählte Dauer |
 | **Store Audio** | Aktiviert die Speicherung der Aufnahme als WAV-Datei unter `/home/teamrapsberry/recordings_local` |
-| **Calibration** | Mikrofon mit einem bekannten Schalldruckpegel (z. B. 94 dB) kalibrieren |
+| **Calibration** | Kalibriert das Mikrofon mit einem bekannten Referenzpegel, z. B. 94 dB |
+| **Download JSON** | Lädt die aktuellen Messdaten als strukturierte JSON-Datei herunter |
 
 ### Angezeigte Messwerte
 
 | Wert | Erklärung |
 |---|---|
-| **A-Weighted** | A-bewerteter Schalldruckpegel in dB |
-| **SPL** | Roher Schalldruckpegel in dB |
+| **A-Weighted** | A-bewerteter Schalldruckpegel in dB. Tiefe Frequenzen werden stärker abgeschwächt, da die Bewertung an die menschliche Hörwahrnehmung angelehnt ist. |
+| **SPL** | Aktueller Schalldruckpegel des verarbeiteten Audioblocks in dB |
 | **RMS** | Effektivwert des Audiosignals |
-| **Peak** | Maximaler Spitzenwert |
-| **Fast** | Zeitbewertung „Fast“ (0,125 s) |
-| **Slow** | Zeitbewertung „Slow“ (1,0 s) |
-| **Leq** | Äquivalenter Dauerschallpegel für die gewählte Messdauer |
+| **Peak** | Maximaler Spitzenwert des aktuellen Audioblocks |
+| **Fast** | Zeitbewerteter Pegel mit kurzer Zeitkonstante von 0,125 s. Reagiert schneller auf Pegeländerungen. |
+| **Slow** | Zeitbewerteter Pegel mit längerer Zeitkonstante von 1,0 s. Reagiert träger und zeigt einen stabileren Wert. |
+| **Leq** | Äquivalenter Dauerschallpegel über die gewählte Messdauer. Wird nach Abschluss der Messung angezeigt. |
+| **LAeq** | A-bewerteter äquivalenter Dauerschallpegel über die gewählte Messdauer. Wird ebenfalls nach Abschluss der Messung angezeigt. |
 
 Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balken dargestellt.
+
+### Leq- und LAeq-Messung durchführen
+
+Leq und LAeq sind Messwerte über eine feste Messdauer. Sie werden nicht dauerhaft als Live-Wert neu berechnet, sondern nach Ablauf der ausgewählten Zeit als finales Ergebnis angezeigt.
+
+1. Auf **Start Measurement** klicken.
+2. Unter **Leq Duration** eine Messdauer auswählen.
+3. Auf **Start Leq / LAeq** klicken.
+4. Während der Messung steht bei Leq und LAeq der Status `running...`.
+5. Nach Ablauf der gewählten Dauer werden beide Werte angezeigt.
+
+Verfügbare Messdauern:
+
+| Auswahl | Bedeutung |
+|---|---|
+| **5 s** | kurze Testmessung |
+| **10 s / 15 s / 30 s** | mittlere Messdauer |
+| **60 s** | Messung über eine Minute |
+| **300 s** | Messung über fünf Minuten |
+| **3600 s** | Messung über eine Stunde |
+
+**Leq** beschreibt den äquivalenten Dauerschallpegel des ungewichteten Signals.  
+**LAeq** beschreibt den äquivalenten Dauerschallpegel des A-bewerteten Signals.
+
+LAeq eignet sich besonders für Anwendungen, bei denen die Wahrnehmung des menschlichen Gehörs berücksichtigt werden soll.
 
 ### Ablauf einer typischen Messung
 
@@ -222,6 +251,13 @@ Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balk
 6. Nach der Messung auf **„Stop Measurement“** klicken.
 7. Aufgenommene WAV-Dateien liegen zunächst unter `/home/teamrapsberry/recordings_local`.
 8. Nach einem Reboot erscheinen die Aufnahmen automatisch auf dem USB-Laufwerk unter `recordings/`.
+
+### Messdaten als JSON exportieren
+
+Über den Button **Download JSON** können die aktuellen Messdaten als JSON-Datei heruntergeladen werden. Die Datei erhält automatisch einen Zeitstempel im Dateinamen, zum Beispiel:
+
+```bash
+spl_measurement_20260717_143210.json
 
 ---
 
