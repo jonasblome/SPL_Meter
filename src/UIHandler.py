@@ -493,11 +493,6 @@ class UIHandler:
         #new stand for calibration
         self.calibration_cleanup_thread = None
         self.calibration_owns_recording = False
-        # Available Leq measurement durations in seconds.
-        # The UI can select one of these values by changing leq_duration_index.
-        self.leq_durations_seconds = [5, 10, 15, 30, 60, 300]
-        self.leq_duration_index = 0
-
         self.audio_device_manager = audio_device_manager
 
         # Available duration options for fixed Leq/LAeq measurements.
