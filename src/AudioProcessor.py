@@ -4,6 +4,14 @@ from scipy import signal
 
 class AudioProcessor:
     def __init__(self, sample_rate=48000):
+        """
+        Contains the main signal-processing functions for the SPL meter.
+
+        The class provides basic sound metrics such as RMS, Peak and SPL,
+        time-weighted levels such as Fast and Slow, equivalent sound levels
+        such as Leq and LAeq, and helper functions for filterbank-based
+        A-weighting.
+        """
         print("AudioProcessor: Initializing")
 
         self.sample_rate = sample_rate
@@ -22,6 +30,19 @@ class AudioProcessor:
 
         self.leq_is_running = False
         self.leq_result_db = None
+
+        # State variables for a fixed-duration LAeq measurement.
+        # LAeq is calculated like Leq, but from an A-weighted audio signal.
+        # This means the frequency weighting is applied before the energetic average.
+        self.laeq_sum_square = 0.0
+        self.laeq_sample_count = 0
+        self.laeq_target_sample_count = 0
+
+        self.laeq_duration_seconds = None
+        self.laeq_sample_rate = None
+
+        self.laeq_is_running = False
+        self.laeq_result_db = None
     
     def compute_peak(self, audio_data):
         return np.max(np.abs(audio_data))
@@ -199,23 +220,27 @@ class AudioProcessor:
         )
 
         return self.compute_time_weighted_db(self.slow_state)
+
     
+    def reset_laeq_measurement(self):
+        """Reset all internal values used for LAeq measurement."""
+        self.laeq_sum_square = 0.0
+        self.laeq_sample_count = 0
+        self.laeq_target_sample_count = 0
 
-    def reset_leq_measurement(self):
-        """Reset all internal values used for Leq measurement."""
-        self.leq_sum_square = 0.0
-        self.leq_sample_count = 0
-        self.leq_target_sample_count = 0
+        self.laeq_duration_seconds = None
+        self.laeq_sample_rate = None
 
-        self.leq_duration_seconds = None
-        self.leq_sample_rate = None
+        self.laeq_is_running = False
+        self.laeq_result_db = None
 
-        self.leq_is_running = False
-        self.leq_result_db = None
 
-    def start_leq_measurement(self, duration_seconds, sample_rate):
+    def start_laeq_measurement(self, duration_seconds, sample_rate):
         """
-        Start a new fixed-duration Leq measurement.
+        Start a new fixed-duration LAeq measurement.
+
+        LAeq uses the same measurement duration logic as Leq, but it must receive
+        an A-weighted audio signal in process_laeq_measurement().
         """
         if duration_seconds <= 0:
             raise ValueError("duration_seconds must be greater than zero")
@@ -223,41 +248,55 @@ class AudioProcessor:
         if sample_rate <= 0:
             raise ValueError("sample_rate must be greater than zero")
 
-        self.reset_leq_measurement()
+        self.reset_laeq_measurement()
 
-        self.leq_duration_seconds = duration_seconds
-        self.leq_sample_rate = sample_rate
-        self.leq_target_sample_count = int(duration_seconds * sample_rate)
+        self.laeq_duration_seconds = duration_seconds
+        self.laeq_sample_rate = sample_rate
 
-        self.leq_is_running = True
-        self.leq_result_db = None
+        # Required number of samples for the selected measurement duration.
+        # Example: 5 s * 48000 samples/s = 240000 samples.
+        self.laeq_target_sample_count = int(duration_seconds * sample_rate)
 
-    
-    def process_leq_measurement(self, audio_data, reference_pressure=20e-6):
+        self.laeq_is_running = True
+        self.laeq_result_db = None
+
+
+    def process_laeq_measurement(self, a_weighted_audio_data, reference_pressure=20e-6):
         """
-        Process one audio block for the running Leq measurement.
+        Process one A-weighted audio block for the running LAeq measurement.
+
+        LAeq is calculated like Leq, but the input signal is A-weighted before
+        the energetic average is calculated. The function does not average
+        A-weighted dB values directly.
+
+        Returns:
+            tuple: (None, False) while running, or (laeq_result_db, True)
+            when the selected duration is complete.
         """
-        if not self.leq_is_running:
-            raise RuntimeError("Leq measurement has not been started.")
+        if not self.laeq_is_running:
+            raise RuntimeError("LAeq measurement has not been started.")
 
-        remaining_samples = self.leq_target_sample_count - self.leq_sample_count
-        audio_data = audio_data[:remaining_samples]
+        # Only process the number of samples that are still needed.
+        # This keeps the measurement duration exact even if the last block is longer.
+        remaining_samples = self.laeq_target_sample_count - self.laeq_sample_count
+        a_weighted_audio_data = a_weighted_audio_data[:remaining_samples]
 
-        self.leq_sum_square += np.sum(audio_data**2)
-        self.leq_sample_count += len(audio_data)
+        # LAeq is an energetic average of the A-weighted signal.
+        self.laeq_sum_square += np.sum(a_weighted_audio_data**2)
+        self.laeq_sample_count += len(a_weighted_audio_data)
 
-        if self.leq_sample_count < self.leq_target_sample_count:
+        if self.laeq_sample_count < self.laeq_target_sample_count:
             return None, False
 
-        self.leq_is_running = False
+        self.laeq_is_running = False
 
-        if self.leq_sample_count == 0 or self.leq_sum_square == 0:
-            self.leq_result_db = -np.inf
+        if self.laeq_sample_count == 0 or self.laeq_sum_square == 0:
+            self.laeq_result_db = -np.inf
         else:
-            mean_square = self.leq_sum_square / self.leq_sample_count
-            self.leq_result_db = 10 * np.log10(mean_square / reference_pressure**2)
+            mean_square = self.laeq_sum_square / self.laeq_sample_count
+            self.laeq_result_db = 10 * np.log10(mean_square / reference_pressure**2)
 
-        return self.leq_result_db, True
+        return self.laeq_result_db, True
     
     def design_a_weighting_filterbank(self, sample_rate, is_octave=True):
         octave_ratio = 10**(3/10) if is_octave else 10**(1/10)
@@ -291,6 +330,30 @@ class AudioProcessor:
             filtered_signals.append(filtered_signal)
         
         return filtered_signals
+    
+    def compute_a_weighted_signal(self, filtered_signals, is_octave=True):
+        """
+        Build an A-weighted time-domain signal from filtered frequency-band signals.
+
+        LAeq must be calculated from A-weighted signal energy.
+        Therefore this function returns the weighted signal itself instead of a dB value.
+        """
+        if filtered_signals is None or len(filtered_signals) == 0:
+            return np.array([], dtype=float)
+
+        frequency_weights = (
+            helpers.frequency_weights_octave
+            if is_octave
+            else helpers.frequency_weights_3rd_octave
+        )
+
+        weighted_signal = np.zeros_like(filtered_signals[0], dtype=float)
+
+        for filtered_signal, (_, weight_db) in zip(filtered_signals, frequency_weights.items()):
+            weight_linear = 10 ** (weight_db / 20.0)
+            weighted_signal += filtered_signal * weight_linear
+
+        return weighted_signal
         
     def compute_a_weighting(self, filtered_signals, is_octave=True):
         frequency_weights = helpers.frequency_weights_octave if is_octave else helpers.frequency_weights_3rd_octave

@@ -22,8 +22,36 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         #btn-stop  { background: #f44336; color: white; }
         #btn-start:disabled, #btn-stop:disabled { opacity: 0.4; cursor: default; }
         #calibration-div  { margin: 20px 0px; }
-        #leq-div  { margin: 20px 0px; }
-        #leq-result { width: 100px }
+        #leq-div {
+            margin: 20px 0px;
+        }
+
+        .leq-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 20px 0 16px 0;
+        }
+
+        .leq-results {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(140px, 180px));
+            gap: 16px;
+            margin-top: 12px;
+        }
+
+        #leq-result,
+        #laeq-result {
+            width: auto;
+            min-height: 86px;
+        }
+
+        @media (max-width: 500px) {
+            .leq-results {
+                grid-template-columns: 1fr;
+            }
+        }
         .store-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 16px; cursor: pointer; }
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
@@ -138,23 +166,35 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     
     <hr>
     
-    <div class="Leq" id="leq-div">
-        <strong>Leq Duration:</strong>
-        <select id="leq-duration" onchange="setLeqDuration(this.value)">
-            <option value="0" selected>5 s</option>
-            <option value="1">10 s</option>
-            <option value="2">15 s</option>
-            <option value="3">30 s</option>
-            <option value="4">60 s</option>
-            <option value="5">300 s</option>
-        </select>
+    <div class="leq-section" id="leq-div">
+    <div class="leq-controls">
+        <div>
+            <strong>Leq Duration:</strong>
+            <select id="leq-duration" onchange="setLeqDuration(this.value)">
+                <option value="0" selected>5 s</option>
+                <option value="1">10 s</option>
+                <option value="2">15 s</option>
+                <option value="3">30 s</option>
+                <option value="4">60 s</option>
+                <option value="5">300 s</option>
+            </select>
+        </div>
+
+        <button onclick="startLeqMeasurement()">Start Leq / LAeq</button>
     </div>
-    <div id="leq-div">
-        <button onclick="startLeqMeasurement()">Start Leq</button>
+
+    <div class="leq-results">
+        <div class="metric-box" id="leq-result">
+            <div class="metric-label">Leq</div>
+            <div class="metric-value" id="leq">--</div>
+        </div>
+
+        <div class="metric-box" id="laeq-result">
+            <div class="metric-label">LAeq</div>
+            <div class="metric-value" id="laeq">--</div>
+        </div>
     </div>
-    <div class="metric-box" id="leq-result">
-        <div class="metric-label">Leq</div><div class="metric-value" id="leq">--</div>
-    </div>
+
     
     <hr>
     
@@ -298,6 +338,7 @@ HTML_PAGE_TAIL = """
         function startLeqMeasurement() {
             fetch('/leq_start', {method: 'POST'}).then(() => {
                 document.getElementById('leq').textContent = 'running...';
+                document.getElementById('laeq').textContent = 'running...';
                 startSSE();
             });
         }
@@ -426,6 +467,11 @@ HTML_PAGE_TAIL = """
                 } else if (d.leq_db !== null) {
                     document.getElementById('leq').textContent = d.leq_db.toFixed(2) + ' dB';
                 }
+                if (d.laeq_is_running) {
+                    document.getElementById('laeq').textContent = 'running...';
+                } else if (d.laeq_db !== null && d.laeq_db !== undefined) {
+                    document.getElementById('laeq').textContent = d.laeq_db.toFixed(2) + ' dB';
+                }
                 if (d.calibration) {
                     let calibrationText = d.calibration.status;
 
@@ -455,20 +501,17 @@ HTML_PAGE_TAIL = """
 class UIHandler:
     def __init__(self, audio_device_manager=None, host="0.0.0.0", port=8501):
         print("UIHandler: Initializing")
-
-        # Available Leq measurement durations in seconds.
-        # The UI can select one of these values by changing leq_duration_index.
-        self.leq_durations_seconds = [5, 10, 15, 30, 60, 300]
-        self.leq_duration_index = 0
-
+        #new stand for calibration
+        self.calibration_cleanup_thread = None
+        self.calibration_owns_recording = False
         self.audio_device_manager = audio_device_manager
 
-        # Available Leq measurement durations in seconds.
-        # The selected index can later be controlled by the web UI.
-        self.leq_durations_seconds = [5, 10, 15, 30, 60, 300]
+        # Available duration options for fixed Leq/LAeq measurements.
+        # The web UI stores only the selected index and reads the duration from this list.
+        self.leq_durations_seconds = [5, 10, 15, 30, 60, 300, 3600]
         self.leq_duration_index = 0
         
-        self.measurement_exporter = MeasurementExporter()
+        self.measurement_exporter = MeasurementExporter(decimal_places=2)
         self.recording_thread = None
         self.app = Flask(__name__)
         self._register_routes()
@@ -520,6 +563,12 @@ class UIHandler:
         
         @self.app.route("/leq_duration", methods=["POST"])
         def leq_duration():
+            """
+            Update the selected Leq/LAeq measurement duration from the Web UI.
+
+            The browser sends the selected index instead of the duration itself.
+            This keeps the allowed values centralized in leq_durations_seconds.
+            """
             data = request.get_json()
             index = int(data.get("index", 0))
 
@@ -533,6 +582,13 @@ class UIHandler:
 
         @self.app.route("/leq_start", methods=["POST"])
         def leq_start():
+            """
+            Start fixed-duration Leq and LAeq measurements.
+
+            Both measurements use the same selected duration and run in parallel:
+            Leq is based on the unweighted signal, while LAeq is based on the
+            A-weighted signal.
+            """
             duration_seconds = self.get_leq_duration_seconds()
 
             # Start audio processing automatically if it is not already running.
@@ -540,10 +596,18 @@ class UIHandler:
             if not device_manager.is_recording:
                 self._start_recording_thread()
 
+            # Clear previous final values before starting a new fixed-duration measurement.
             device_manager.latest_leq_db = None
             device_manager.latest_leq_is_complete = False
+            device_manager.latest_laeq_db = None
+            device_manager.latest_laeq_is_complete = False
 
             device_manager.audio_processor.start_leq_measurement(
+                duration_seconds=duration_seconds,
+                sample_rate=device_manager.sample_rate
+            )
+
+            device_manager.audio_processor.start_laeq_measurement(
                 duration_seconds=duration_seconds,
                 sample_rate=device_manager.sample_rate
             )
@@ -557,16 +621,26 @@ class UIHandler:
         
         @self.app.route("/calibrate", methods=["POST"])
         def calibrate():
+            started_for_calibration = False
+
+            # Calibration needs live audio. Start it automatically when necessary.
             if not device_manager.is_recording:
-                return jsonify({
-                    "error": "Start measurement before calibration."
-                }), 400
+                self.calibration_owns_recording = True
+                started_for_calibration = True
+                self._start_recording_thread()
+            else:
+                self.calibration_owns_recording = False
 
             data = request.get_json() or {}
             reference_db = float(data.get("reference_db", 94.0))
             threshold_db = float(data.get("threshold_db", 50.0))
 
             result = device_manager.calibrate_microphone(reference_db, threshold_db)
+
+            if started_for_calibration:
+                self._start_calibration_cleanup_thread()
+
+            result["recording_started_for_calibration"] = started_for_calibration
             return jsonify(result)
         
         @self.app.route("/store_recording", methods=["POST"])
@@ -592,20 +666,33 @@ class UIHandler:
         @self.app.route("/stream")
         def stream():
             def event_generator():
-                while device_manager.is_recording:
+                while (
+                    device_manager.is_recording
+                    or device_manager.is_calibrating
+                ):
                     payload = json.dumps({
+                        # Basic live values
                         "spl_db":        device_manager.latest_spl_db,
                         "rms":           device_manager.latest_rms,
                         "peak":          device_manager.latest_peak,
                         "a_weighted":    device_manager.latest_a_weighted_spl_db,
                         "fast":          device_manager.latest_fast_state,
                         "slow":          device_manager.latest_slow_state,
+
+                        # Current filterband values for the bar display
                         "filterband_spl_db": device_manager.latest_filterband_spl_db,
 
-                        # Leq values for the web UI
+                        # Fixed-duration Leq status and result
                         "leq_db":             device_manager.latest_leq_db,
                         "leq_is_complete":    device_manager.latest_leq_is_complete,
                         "leq_is_running":     device_manager.audio_processor.leq_is_running,
+
+                        # Fixed-duration LAeq status and result
+                        "laeq_db":            device_manager.latest_laeq_db,
+                        "laeq_is_complete":   device_manager.latest_laeq_is_complete,
+                        "laeq_is_running":    device_manager.audio_processor.laeq_is_running,
+
+                        # Calibration status shown in the preparation section of the UI
                         "calibration": {
                         "active": device_manager.is_calibrating,
                         "status": device_manager.calibration_status,
@@ -615,13 +702,27 @@ class UIHandler:
                         "measured_db": device_manager.calibration_measured_db,
                         "offset_db": device_manager.calibration_offset_db,
                     },
-                    })
+                })
                     yield f"data: {payload}\n\n"
                     time.sleep(0.0167)  # ~60 Hz update rate
+            
+            response = Response(
+                event_generator(),
+                mimetype="text/event-stream"
+            )
+            response.headers["Cache-Control"] = "no-cache"
+            response.headers["X-Accel-Buffering"] = "no"
             return Response(event_generator(), mimetype="text/event-stream")
         
         @self.app.route("/export_json", methods=["GET"])
         def export_json():
+            """
+            Create and return a downloadable JSON export of the current measurement.
+
+            The export includes setup metadata, latest result values, filterband
+            metadata and the timestamped measurement history collected by the
+            device manager.
+            """
             if hasattr(self, "leq_durations_seconds") and hasattr(self, "leq_duration_index"):
                 leq_duration_seconds = self.leq_durations_seconds[self.leq_duration_index]
             else:
@@ -646,11 +747,34 @@ class UIHandler:
             )
 
     def _start_recording_thread(self):
+        """
+        Start audio processing in a background thread if it is not already running.
+
+        Flask must stay responsive while the audio device manager continuously
+        processes incoming audio blocks.
+        """
         if self.recording_thread is None or not self.recording_thread.is_alive():
             self.recording_thread = threading.Thread(
                 target=self.audio_device_manager.start_recording, daemon=True
             )
             self.recording_thread.start()
+
+    def _start_calibration_cleanup_thread(self):
+        """Stop audio processing after a standalone calibration finishes."""
+
+        def wait_for_calibration():
+            while self.audio_device_manager.is_calibrating:
+                time.sleep(0.1)
+
+            if self.calibration_owns_recording:
+                self._stop_recording_thread()
+                self.calibration_owns_recording = False
+
+        self.calibration_cleanup_thread = threading.Thread(
+            target=wait_for_calibration,
+            daemon=True
+        )
+        self.calibration_cleanup_thread.start()
 
     def _stop_recording_thread(self):
         self.audio_device_manager.stop_recording()

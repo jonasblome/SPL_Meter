@@ -23,7 +23,14 @@ from datetime import datetime
 
 
 class AudioDeviceManager:
-    """Manages ICS43434 I2S microphone audio input and processing"""
+    """
+    Manages real-time audio input and stores the latest measurement values.
+
+    The class opens the microphone stream, receives audio blocks in the
+    PyAudio callback and updates the values used by the Web UI and JSON
+    export. It also handles calibration, optional WAV recording, Leq/LAeq
+    processing and timestamped measurement history.
+    """
     
     def __init__(self, audio_processor, sample_rate=48000, chunk_size=1024, device_index=0):
         """
@@ -49,12 +56,19 @@ class AudioDeviceManager:
         # Audio processing
         self.audio_processor = audio_processor
         self.latest_raw_spl_db = 0.0
+        self.calibration_offset_rms = 0.0
         self.calibration_offset_db = 0.0
         self.latest_spl_db = 0.0
         self.latest_rms = 0.0
         self.latest_peak = 0.0
+
+        # Latest Leq values used by the UI stream and JSON export.
         self.latest_leq_db = None
         self.latest_leq_is_complete = False
+        # Latest LAeq values used by the UI stream and JSON export.
+        # LAeq is the equivalent continuous level of the A-weighted signal.
+        self.latest_laeq_db = None
+        self.latest_laeq_is_complete = False
 
         # Prepare filterbank in advance to only calculate once
         self.show_third_octave_bands = False
@@ -86,10 +100,6 @@ class AudioDeviceManager:
         self.latest_fast_state = 0.0
         self.latest_slow_state = 0.0
 
-        # Latest Leq values used by the UI stream and JSON export.
-        self.latest_leq_db = None
-        self.latest_leq_is_complete = False
-
         # Time series of measurement values for JSON export.
         # One entry is stored approximately once per second during recording.
         self.measurement_history = []
@@ -101,9 +111,9 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
-        self.recordings_dir = "./"
-        # self.recordings_dir = "/home/teamrapsberry/recordings_local"
-        # os.makedirs(self.recordings_dir, exist_ok=True)
+        self.recordings_dir = "./" # Use for personal laptop
+        # self.recordings_dir = "/home/teamrapsberry/recordings_local" # Comment out for personal laptop
+        # os.makedirs(self.recordings_dir, exist_ok=True) # Comment out for personal laptop
 
         # Maximum total size for stored recordings: 1.6 GB
         self.max_recordings_size_bytes = int(1.6 * 1024 * 1024 * 1024)
@@ -150,8 +160,8 @@ class AudioDeviceManager:
         # Compute audio metrics
         self.latest_raw_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
         self.latest_spl_db = float(self.latest_raw_spl_db + self.calibration_offset_db)
-        self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
-        self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
+        self.latest_rms = float(self.audio_processor.compute_rms(audio_float) + self.calibration_offset_rms)
+        self.latest_peak = float(self.audio_processor.compute_peak(audio_float) + self.calibration_offset_rms)
 
         # Compute filterband levels and A-weighting (only active number of bands)
         active_filterbank = self.filterbank[:self.num_bands]
@@ -160,9 +170,26 @@ class AudioDeviceManager:
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
         ]
-        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals, self.show_third_octave_bands)))
+        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals, self.show_third_octave_bands) + self.calibration_offset_db))
 
-        # Time weighting
+        # If a LAeq measurement is active, process the current A-weighted audio block.
+        # LAeq is calculated from A-weighted signal energy, not by averaging A-weighted dB values.
+        if self.audio_processor.laeq_is_running:
+            a_weighted_signal = self.audio_processor.compute_a_weighted_signal(filtered_signals)
+
+            laeq_db, laeq_is_complete = self.audio_processor.process_laeq_measurement(
+                a_weighted_signal
+            )
+
+            if laeq_is_complete:
+                self.latest_laeq_db = float(laeq_db)
+                self.latest_laeq_is_complete = True
+                print(f"LAeq complete: {self.latest_laeq_db:.2f} dB")
+            else:
+                self.latest_laeq_is_complete = False
+
+        # Compute Fast and Slow time-weighted levels.
+        # Both values are returned in dB SPL and then shifted by the calibration offset.
         fast_db = self.audio_processor.compute_fast_state(audio_float)
         slow_db = self.audio_processor.compute_slow_state(audio_float)
 
@@ -244,6 +271,7 @@ class AudioDeviceManager:
             mean_square = self.calibration_power_sum / max(1, self.calibration_sample_count)
             measured_db = self.audio_processor.mean_square_to_spl_db(mean_square)
 
+            self.calibration_offset_rms = mean_square
             self.calibration_measured_db = float(measured_db)
             self.calibration_offset_db = float(self.calibration_reference_db - measured_db)
 
@@ -258,7 +286,10 @@ class AudioDeviceManager:
         """
         Store one timestamped measurement sample for JSON export.
 
-        The values are stored once per second instead of every audio callback.
+        The audio callback runs many times per second. For the export, we only
+        store one reduced measurement sample at the configured history interval.
+        Filterband values are stored in the same order as the top-level
+        filterband center frequencies in the JSON export.
         """
         if self._measurement_start_time is None:
             return
@@ -272,31 +303,30 @@ class AudioDeviceManager:
 
         sample = {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "elapsed_seconds": round(elapsed_seconds, 3),
+            "elapsed_seconds": elapsed_seconds,
 
-            "z_weighted_spl_db": self.safe_float(self.latest_spl_db),
-            "raw_spl_db": self.safe_float(getattr(self, "latest_raw_spl_db", None)),
-            "rms": self.safe_float(self.latest_rms),
-            "peak": self.safe_float(self.latest_peak),
-            "a_weighted_spl_db": self.safe_float(self.latest_a_weighted_spl_db),
+            "spl_db": self._safe_float(self.latest_spl_db),
+            "raw_spl_db": self._safe_float(getattr(self, "latest_raw_spl_db", None)),
+            "rms": self._safe_float(self.latest_rms),
+            "peak": self._safe_float(self.latest_peak),
 
-            "fast_db": self.safe_float(self.latest_fast_state),
-            "slow_db": self.safe_float(self.latest_slow_state),
+            "a_weighted_spl_db": self._safe_float(self.latest_a_weighted_spl_db),
+            "fast_db": self._safe_float(self.latest_fast_state),
+            "slow_db": self._safe_float(self.latest_slow_state),
 
-            "peak_linear": self.safe_float(self.latest_peak),
-            "peak_dbfs": self.safe_float(self.linear_to_dbfs(self.latest_peak)),
+            # Filterband SPL values for this timestamp.
+            # The corresponding center frequencies are stored once in
+            # export["filterbands"]["center_frequency_hz"].
+            "filterband_spl_db": [
+                self._safe_float(value)
+                for value in getattr(self, "latest_filterband_spl_db", [])
+            ],
         }
 
         self.measurement_history.append(sample)
         self._last_history_sample_time = now
 
-    # Gives back the dBFS (fulls sclae digital signal) value. used for the peak:dBFS in the export
-    def linear_to_dbfs(self, value):
-        if value is None or value <= 0:
-            return None
-        return 20 * np.log10(value)
-
-    def safe_float(self, value):
+    def _safe_float(self, value):
         if value is None:
             return None
 

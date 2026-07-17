@@ -186,3 +186,113 @@ Der Tag war ein langer Debugging-Marathon vom ersten `pip install` bis zu echten
 ---
 
 *Letzte Aktualisierung: 17.06.2026, 23:55 Uhr*
+
+
+
+## Datum: Ende Juni / Anfang Juli 2026 - Implementierung Leq, LAeq und Export
+
+### Ziele der Session
+- Zeitbewertung Fast/Slow fachlich korrekt in die Anzeige integrieren
+- Leq-Messung über auswählbare Messdauer implementieren
+- LAeq als A-bewertete Ergänzung zu Leq hinzufügen
+- JSON-Export für Messdaten strukturieren und erweitern
+- Weboberfläche um neue Messwerte und Exportfunktion ergänzen
+
+### Erledigte Aufgaben
+
+#### ✅ 1. Fast/Slow-Zeitbewertung überarbeitet
+- Fast- und Slow-Anzeige in der Weboberfläche ergänzt
+- Fast mit kurzer Zeitkonstante von 125 ms umgesetzt
+- Slow mit längerer Zeitkonstante von 1 s umgesetzt
+- Berechnung auf Basis des quadratischen Schalldrucks umgesetzt
+- Ausgabe anschließend wieder in dB SPL umgerechnet
+- Balkenanzeige in der Web-UI ergänzt, um Fast/Slow visuell vergleichbar zu machen
+
+#### ✅ 2. Leq-Messung implementiert
+- Leq als äquivalenten Dauerschallpegel über eine feste Messdauer umgesetzt
+- Auswählbare Messdauern in der Weboberfläche ergänzt:
+  - 5 s
+  - 10 s
+  - 15 s
+  - 30 s
+  - 60 s
+  - 300 s
+- Startfunktion für Leq-Messungen über die Web-UI implementiert
+- Während der Messung wird der Status `running...` angezeigt
+- Nach Ablauf der Messdauer wird der finale Leq-Wert berechnet und angezeigt
+- Berechnung erfolgt energetisch über quadrierte Signalwerte, nicht durch Mittelung von dB-Werten
+
+#### ✅ 3. LAeq als Erweiterung ergänzt
+- LAeq als A-bewerteten äquivalenten Dauerschallpegel implementiert
+- Leq und LAeq werden gemeinsam über dieselbe Messdauer gestartet
+- LAeq basiert auf einem A-bewerteten Zeitsignal
+- Die Berechnung mittelt nicht direkt A-weighted dB-Werte, sondern arbeitet ebenfalls energetisch
+- Separate Anzeige für LAeq in der Weboberfläche ergänzt
+- LAeq in den JSON-Export aufgenommen
+
+#### ✅ 4. JSON-Export implementiert und erweitert
+- `MeasurementExporter` für strukturierte JSON-Dateien erstellt
+- Export enthält:
+  - `schema_version`
+  - `exported_at`
+  - `measurement_setup`
+  - `results`
+  - `filterbands`
+  - `time_series`
+- Download-Button in der Weboberfläche ergänzt
+- Flask-Route `/export_json` implementiert
+- Export-Dateien erhalten automatisch einen Zeitstempel im Dateinamen
+
+#### ✅ 5. Time-Series für Messverlauf ergänzt
+- Messwerte werden während der Messung in regelmäßigen Abständen gespeichert
+- Jeder gespeicherte Messpunkt enthält unter anderem:
+  - Zeitstempel
+  - vergangene Messzeit
+  - SPL
+  - A-weighted SPL
+  - Fast
+  - Slow
+  - RMS
+  - Peak
+  - Filterbandwerte
+- Dadurch kann der Messverlauf nachträglich nachvollzogen werden
+
+#### ✅ 6. Filterbandwerte pro Timestamp ergänzt
+- Filterbandwerte werden nun zu jedem gespeicherten Zeitstempel in der `time_series` abgelegt
+- Die zugehörigen Mittenfrequenzen werden einmalig im Bereich `filterbands` gespeichert
+- Dadurch bleibt der Export kompakt und die Filterbandwerte sind trotzdem eindeutig zuordenbar
+- Struktur:
+  - `filterbands.center_frequency_hz`
+  - `time_series[*].filterband_spl_db`
+
+#### ✅ 7. Konfigurierbare Rundung im JSON-Export
+- Rundungsgrad für Messwerte im JSON-Export ergänzt
+- Einstellung erfolgt über `decimal_places` im `MeasurementExporter`
+- Die Rundung wird zentral auf die Exportstruktur angewendet
+- Ganzzahlen, Strings, Boolean-Werte und `None` bleiben unverändert
+- Dadurch kann der Export je nach Bedarf kompakter oder genauer ausgegeben werden
+
+#### ✅ 8. Web-UI erweitert und angepasst
+- Fast- und Slow-Werte mit dB-Anzeige ergänzt
+- Balkenanzeigen für Fast und Slow umgesetzt
+- Leq-/LAeq-Bereich mit Dauerwahl und Startbutton ergänzt
+- Leq und LAeq nebeneinander dargestellt
+- JSON-Download-Button ergänzt
+- Live-Aktualisierung über Server-Sent Events erweitert
+
+#### ✅ 9. Code-Kommentare und Docstrings ergänzt
+- Wichtige neue Funktionen mit Docstrings versehen
+- Kommentare für Leq-, LAeq- und Exportlogik ergänzt
+- Kommentare bewusst auf fachlich wichtige Stellen beschränkt
+- Keine unnötige Kommentierung jeder einzelnen Codezeile
+- Fokus auf Verständlichkeit der eigenen Implementierung gelegt
+
+### Zusammenfassung
+
+In dieser Entwicklungsphase wurde der SPL-Meter um mehrere zentrale Mess- und Exportfunktionen erweitert. Fast und Slow wurden als zeitbewertete Pegelanzeigen integriert. Zusätzlich wurde eine Leq-Messung über wählbare Messdauern umgesetzt und später durch LAeq als A-bewertete Variante ergänzt.
+
+Der JSON-Export wurde so erweitert, dass neben aktuellen Ergebniswerten auch der zeitliche Verlauf der Messung und die Filterbandwerte pro Zeitstempel gespeichert werden. Die Weboberfläche wurde entsprechend angepasst, sodass Leq, LAeq, Fast, Slow und der Export bedienbar und sichtbar sind.
+
+**Status:** Leq, LAeq, Fast/Slow-Anzeige und JSON-Export funktional umgesetzt und für Dokumentation vorbereitet.
+
+---
