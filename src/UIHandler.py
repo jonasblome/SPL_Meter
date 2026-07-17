@@ -87,18 +87,20 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     
     <hr>
 
-    <div class="num-bands">
+    <!--<div class="num-bands">
         <strong>Number of Bands:</strong>
         <select id="num-bands" onchange="setNumBands(this.value)">
             <option value="4">4</option>
             <option value="6">6</option>
             <option value="8">8</option>
-            <option value="10" selected>10</option>
+            <option value="10">10</option>
+            <option value="12" selected>12</option>
+            <option value="36" selected>36</option>
         </select>
         <span class="hint">More bands look nicer but need more processing power.</span>
     </div>
     
-    <hr>
+    <hr>-->
 
     <div class="calibration">
         <strong id="calibration-div">Calibration:</strong>
@@ -233,8 +235,13 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     <hr>
     
     <div class="filterband-section">
-    <h3>Filterband SPL Levels (dB)</h3>
-    <div class="filterband-grid" id="filterband-grid">
+        <h3>Filterband SPL Levels (dB)</h3>
+
+        <label class="filterband-toggle">
+            <input type="checkbox" onchange="setThirdOctaveBands(this.checked)">
+            Show 1/3rd Octave Bands
+        </label>
+        <div class="filterband-grid" id="filterband-grid">
 """
 
 HTML_PAGE_TAIL = """
@@ -323,6 +330,10 @@ HTML_PAGE_TAIL = """
 
         function setStoreAudio(checked) {
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
+        }
+
+        function setThirdOctaveBands(checked) {
+            fetch('/set_third_octave_bands', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({set_third_octave_bands: checked})});
         }
 
         function setNumBands(value) {
@@ -563,6 +574,12 @@ class UIHandler:
             data = request.get_json()
             device_manager.should_store_recording = bool(data.get("store", False))
             return jsonify({"store": device_manager.should_store_recording})
+        
+        @self.app.route("/set_third_octave_bands", methods=["POST"])
+        def set_third_octave_bands():
+            data = request.get_json()
+            device_manager.set_third_octave_bands(bool(data.get("set_third_octave_bands", False)))
+            return jsonify({"set_third_octave_bands": device_manager.show_third_octave_bands})
 
         @self.app.route("/num_bands", methods=["POST"])
         def num_bands():

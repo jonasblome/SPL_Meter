@@ -57,8 +57,9 @@ class AudioDeviceManager:
         self.latest_leq_is_complete = False
 
         # Prepare filterbank in advance to only calculate once
-        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=True)
-        self.num_bands = min(10, len(self.filterbank))
+        self.show_third_octave_bands = False
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=self.show_third_octave_bands)
+        self.num_bands = len(self.filterbank)
         self.latest_filterband_spl_db = [0.0] * len(self.filterbank)
         self.latest_a_weighted_spl_db = 0.0
        
@@ -100,15 +101,15 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
-        # self.recordings_dir = "./"
-        self.recordings_dir = "/home/teamrapsberry/recordings_local"
-        os.makedirs(self.recordings_dir, exist_ok=True)
+        self.recordings_dir = "./"
+        # self.recordings_dir = "/home/teamrapsberry/recordings_local"
+        # os.makedirs(self.recordings_dir, exist_ok=True)
 
         # Maximum total size for stored recordings: 1.6 GB
         self.max_recordings_size_bytes = int(1.6 * 1024 * 1024 * 1024)
 
         
-    def _audio_callback(self, in_data, frame_count, time_info, status):
+    def audio_callback(self, in_data, frame_count, time_info, status):
         """Callback function for audio stream"""
         # Convert byte data to numpy array (32-bit PCM, googlevoicehat I2S driver)
         raw_audio_data = np.frombuffer(in_data, dtype=np.int32)
@@ -159,7 +160,7 @@ class AudioDeviceManager:
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
         ]
-        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals)))
+        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals, self.show_third_octave_bands)))
 
         # Time weighting
         fast_db = self.audio_processor.compute_fast_state(audio_float)
@@ -169,7 +170,7 @@ class AudioDeviceManager:
         self.latest_slow_state = float(slow_db + self.calibration_offset_db)
 
         # Store timestamped measurement values for JSON export.
-        self._store_measurement_history_sample()
+        self.store_measurement_history_sample()
         
         return (in_data, pyaudio.paContinue)
     
@@ -253,7 +254,7 @@ class AudioDeviceManager:
                 f"Offset: {self.calibration_offset_db:.2f} dB"
             )
     
-    def _store_measurement_history_sample(self):
+    def store_measurement_history_sample(self):
         """
         Store one timestamped measurement sample for JSON export.
 
@@ -273,29 +274,29 @@ class AudioDeviceManager:
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "elapsed_seconds": round(elapsed_seconds, 3),
 
-            "z_weighted_spl_db": self._safe_float(self.latest_spl_db),
-            "raw_spl_db": self._safe_float(getattr(self, "latest_raw_spl_db", None)),
-            "rms": self._safe_float(self.latest_rms),
-            "peak": self._safe_float(self.latest_peak),
-            "a_weighted_spl_db": self._safe_float(self.latest_a_weighted_spl_db),
+            "z_weighted_spl_db": self.safe_float(self.latest_spl_db),
+            "raw_spl_db": self.safe_float(getattr(self, "latest_raw_spl_db", None)),
+            "rms": self.safe_float(self.latest_rms),
+            "peak": self.safe_float(self.latest_peak),
+            "a_weighted_spl_db": self.safe_float(self.latest_a_weighted_spl_db),
 
-            "fast_db": self._safe_float(self.latest_fast_state),
-            "slow_db": self._safe_float(self.latest_slow_state),
+            "fast_db": self.safe_float(self.latest_fast_state),
+            "slow_db": self.safe_float(self.latest_slow_state),
 
-            "peak_linear": self._safe_float(self.latest_peak),
-            "peak_dbfs": self._safe_float(self._linear_to_dbfs(self.latest_peak)),
+            "peak_linear": self.safe_float(self.latest_peak),
+            "peak_dbfs": self.safe_float(self.linear_to_dbfs(self.latest_peak)),
         }
 
         self.measurement_history.append(sample)
         self._last_history_sample_time = now
 
     # Gives back the dBFS (fulls sclae digital signal) value. used for the peak:dBFS in the export
-    def _linear_to_dbfs(self, value):
+    def linear_to_dbfs(self, value):
         if value is None or value <= 0:
             return None
         return 20 * np.log10(value)
 
-    def _safe_float(self, value):
+    def safe_float(self, value):
         if value is None:
             return None
 
@@ -331,7 +332,7 @@ class AudioDeviceManager:
                 input=True,
                 input_device_index=self.device_index,
                 frames_per_buffer=self.chunk_size,
-                stream_callback=self._audio_callback
+                stream_callback=self.audio_callback
             )
             
             # Start the stream
@@ -380,9 +381,9 @@ class AudioDeviceManager:
         print(f"Storing recorded audio to file: {file_name}")
         all_recording_data = np.concatenate(self.recording_data_blocks).ravel()
         wf.write(file_name, self.sample_rate, all_recording_data)
-        self._cleanup_old_recordings()
+        self.cleanup_old_recordings()
 
-    def _cleanup_old_recordings(self):
+    def cleanup_old_recordings(self):
         """Delete oldest recordings if total size exceeds 1.6 GB."""
         wav_files = glob.glob(os.path.join(self.recordings_dir, "*.wav"))
         if not wav_files:
@@ -404,6 +405,10 @@ class AudioDeviceManager:
                 print(f"Deleted old recording to free space: {oldest}")
             except OSError as e:
                 print(f"Failed to delete old recording {oldest}: {e}")
+
+    def set_third_octave_bands(self, show_third_octave_bands):
+        self.show_third_octave_bands = show_third_octave_bands
+        self.filterbank = self.audio_processor.design_a_weighting_filterbank(self.sample_rate, is_octave=self.show_third_octave_bands)
 
     def list_devices(self):
         """List available audio devices"""
@@ -439,8 +444,3 @@ class AudioDeviceManager:
             raise ValueError(f"num_bands must be between 1 and {len(self.filterbank)}")
         self.num_bands = num_bands
         return self.num_bands
-    
-    def generate_noise(self, num_samples=48000):
-        noise = np.random.normal(0, 1, num_samples)
-
-        return noise
