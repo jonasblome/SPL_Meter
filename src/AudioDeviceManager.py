@@ -49,6 +49,7 @@ class AudioDeviceManager:
         # Audio processing
         self.audio_processor = audio_processor
         self.latest_raw_spl_db = 0.0
+        self.calibration_offset_rms = 0.0
         self.calibration_offset_db = 0.0
         self.latest_spl_db = 0.0
         self.latest_rms = 0.0
@@ -100,9 +101,9 @@ class AudioDeviceManager:
         self.storing_format = pyaudio.paFloat32
         self.should_store_recording = False
         self.recording_data_blocks = []
-        # self.recordings_dir = "./"
-        self.recordings_dir = "/home/teamrapsberry/recordings_local"
-        os.makedirs(self.recordings_dir, exist_ok=True)
+        # self.recordings_dir = "./" # Use for personal laptop
+        self.recordings_dir = "/home/teamrapsberry/recordings_local" # Comment out for personal laptop
+        os.makedirs(self.recordings_dir, exist_ok=True) # Comment out for personal laptop
 
         # Maximum total size for stored recordings: 1.6 GB
         self.max_recordings_size_bytes = int(1.6 * 1024 * 1024 * 1024)
@@ -149,8 +150,8 @@ class AudioDeviceManager:
         # Compute audio metrics
         self.latest_raw_spl_db = float(self.audio_processor.compute_spl_db(audio_float))
         self.latest_spl_db = float(self.latest_raw_spl_db + self.calibration_offset_db)
-        self.latest_rms = float(self.audio_processor.compute_rms(audio_float))
-        self.latest_peak = float(self.audio_processor.compute_peak(audio_float))
+        self.latest_rms = float(self.audio_processor.compute_rms(audio_float) + self.calibration_offset_rms)
+        self.latest_peak = float(self.audio_processor.compute_peak(audio_float) + self.calibration_offset_rms)
 
         # Compute filterband levels and A-weighting (only active number of bands)
         active_filterbank = self.filterbank[:self.num_bands]
@@ -159,7 +160,7 @@ class AudioDeviceManager:
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
             for signal in filtered_signals
         ]
-        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals)))
+        self.latest_a_weighted_spl_db = float(max(-120.0, self.audio_processor.compute_a_weighting(filtered_signals) + self.calibration_offset_db))
 
         # Time weighting
         fast_db = self.audio_processor.compute_fast_state(audio_float)
@@ -243,6 +244,7 @@ class AudioDeviceManager:
             mean_square = self.calibration_power_sum / max(1, self.calibration_sample_count)
             measured_db = self.audio_processor.mean_square_to_spl_db(mean_square)
 
+            self.calibration_offset_rms = mean_square
             self.calibration_measured_db = float(measured_db)
             self.calibration_offset_db = float(self.calibration_reference_db - measured_db)
 
