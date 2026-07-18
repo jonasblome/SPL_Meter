@@ -187,32 +187,34 @@ python3 src/main.py --simulate /home/teamrapsberry/testsignal.wav
 
 ### Funktionen der Web-UI
 
-Die Oberfläche zeigt folgende Bereiche an:
-
 Die Oberfläche zeigt folgende Bedienbereiche an:
 
 | Bereich | Bedeutung |
 |---|---|
-| **Start / Stop Measurement** | Startet oder stoppt die Live-Messung über das Mikrofon |
-| **Leq Duration** | Legt die Messdauer für Leq und LAeq fest |
-| **Start Leq / LAeq** | Startet eine Leq- und LAeq-Messung über die gewählte Dauer |
-| **Store Audio** | Aktiviert die Speicherung der Aufnahme als WAV-Datei unter `/home/teamrapsberry/recordings_local` |
-| **Calibration** | Kalibriert das Mikrofon mit einem bekannten Referenzpegel, z. B. 94 dB |
-| **Download JSON** | Lädt die aktuellen Messdaten als strukturierte JSON-Datei herunter |
+| **Store Audio** | Aktiviert die Speicherung der Aufnahme als WAV-Datei unter `/home/teamrapsberry/recordings_local`. |
+| **Number of Bands** | Ermöglicht eine Reduktion der Anzahl angezeigter Filterbänder für bessere Performance. |
+| **Calibration** | Kalibriert das Mikrofon mit einem bekannten Referenzpegel (z. B. 94 dB) und einem Detection-Threshold der bei Überschreitung den Kalibrierungszeitraum startet. |
+| **Start / Stop Measurement** | Startet oder stoppt die Live-Messung über das Mikrofon. |
+| **Export to JSON** | Lädt die aktuellen Messdaten als strukturierte JSON-Datei herunter. |
+| **Leq Duration** | Legt die Messdauer für Leq und LAeq fest. |
+| **Start Leq / LAeq** | Startet eine Leq- und LAeq-Messung über die gewählte Dauer. |
+| **Leq** | Äquivalenter Dauerschallpegel über die gewählte Messdauer. Wird nach Abschluss der Messung angezeigt. |
+| **LAeq** | A-bewerteter äquivalenter Dauerschallpegel über die gewählte Messdauer. Wird ebenfalls nach Abschluss der Messung angezeigt. |
 
 ### Angezeigte Messwerte
 
 | Wert | Erklärung |
 |---|---|
-| **A-Weighted** | A-bewerteter Schalldruckpegel in dB. Tiefe Frequenzen werden stärker abgeschwächt, da die Bewertung an die menschliche Hörwahrnehmung angelehnt ist. |
-| **SPL** | Aktueller Schalldruckpegel des verarbeiteten Audioblocks in dB |
-| **RMS** | Effektivwert des Audiosignals |
 | **Peak** | Maximaler Spitzenwert des aktuellen Audioblocks |
+| **RMS** | Effektivwert des Audiosignals |
+| **SPL** | Aktueller Schalldruckpegel des verarbeiteten Audioblocks in dB |
+| **A-Weighted** | A-bewerteter Schalldruckpegel in dB. Tiefe Frequenzen werden stärker abgeschwächt, da die Bewertung an die menschliche Hörwahrnehmung angelehnt ist. |
 | **Fast** | Zeitbewerteter Pegel mit kurzer Zeitkonstante von 0,125 s. Reagiert schneller auf Pegeländerungen. |
 | **Slow** | Zeitbewerteter Pegel mit längerer Zeitkonstante von 1,0 s. Reagiert träger und zeigt einen stabileren Wert. |
-| **Leq** | Äquivalenter Dauerschallpegel über die gewählte Messdauer. Wird nach Abschluss der Messung angezeigt. |
-| **LAeq** | A-bewerteter äquivalenter Dauerschallpegel über die gewählte Messdauer. Wird ebenfalls nach Abschluss der Messung angezeigt. |
 
+Der Toggle-Button 'Show 1/3rd Octave Bands (de-)aktiviert die Nutzung von Terz-Filterbändern.
+Wenn nicht aus Performancegründen eine geringere Anzahl an darzustellenden Bändern ausgewählt wurde, wird beim wechsel zwischen
+Oktav- und Terzbändern automatisch die Anzahl der angezeigten Bänder gewechselt.
 Darunter wird die Aufteilung der Schalldruckpegel nach Frequenzbändern als Balken dargestellt.
 
 ### Leq- und LAeq-Messung durchführen

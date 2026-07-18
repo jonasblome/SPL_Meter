@@ -166,9 +166,16 @@ class AudioDeviceManager:
         self.latest_rms = float(self.audio_processor.compute_rms(audio_float) + self.calibration_offset_rms)
         self.latest_peak = float(self.audio_processor.compute_peak(audio_float) + self.calibration_offset_rms)
 
-        # Compute filterband levels and A-weighting (only active number of bands)
-        active_filterbank = self.third_octave_filterbank[:self.num_bands] if self.show_third_octave_bands else self.octave_filterbank[:self.num_bands]
-        self.active_filterbank_freqs = list(helpers.frequency_weights_3rd_octave.keys()) if self.show_third_octave_bands else list(helpers.frequency_weights_octave.keys())
+        # Compute filterband levels and A-weighting (only active number of bands from the top)
+        if self.show_third_octave_bands:
+            total_num_bands = len(self.third_octave_filterbank)
+            active_filterbank = self.third_octave_filterbank[total_num_bands - self.num_bands : total_num_bands]
+            self.active_filterbank_freqs = list(helpers.frequency_weights_3rd_octave.keys())[total_num_bands - self.num_bands : total_num_bands]
+        else:
+            total_num_bands = len(self.octave_filterbank)
+            active_filterbank = self.octave_filterbank[total_num_bands - self.num_bands : total_num_bands]
+            self.active_filterbank_freqs = list(helpers.frequency_weights_octave.keys())[total_num_bands - self.num_bands : total_num_bands]
+        
         filtered_signals = self.audio_processor.apply_filterbank(audio_float, active_filterbank)
         self.latest_filterband_spl_db = [
             float(max(-120.0, self.audio_processor.compute_spl_db(signal)))
@@ -473,7 +480,8 @@ class AudioDeviceManager:
         valid_num_bands = len(self.third_octave_filterbank) if self.show_third_octave_bands else len(self.octave_filterbank)
 
         if num_bands < 1 or num_bands > valid_num_bands:
-            raise ValueError(f"num_bands must be between 1 and {valid_num_bands}")
+            print(f"num_bands must be between 1 and {valid_num_bands}")
+        else:
+            self.num_bands = num_bands
         
-        self.num_bands = num_bands
         return self.num_bands

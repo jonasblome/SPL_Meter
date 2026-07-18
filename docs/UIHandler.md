@@ -15,6 +15,7 @@ measurement data to the browser through Server-Sent Events.
 - `POST /leq_duration`: Selects the Leq duration.
 - `POST /store_recording`: Enables or disables WAV recording.
 - `POST /num_bands`: Selects the displayed number of filter bands.
+- `POST /set_third_octave_bands`: (De-)Activates 1/3rd octave filter bands.
 - `GET /stream`: Streams live data through SSE.
 - `GET /export_json`: Downloads a JSON measurement snapshot.
 

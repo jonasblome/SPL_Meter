@@ -2,7 +2,7 @@
 
 ## Projektübersicht
 
-Dieses Projekt implementiert ein SPL (Sound Pressure Level) Meter auf einem Raspberry Pi Zero W mit einem ICS43434 I2S-Mikrofon. Die Messwerte werden über ein Flask-basiertes Web-Interface in Echtzeit angezeigt. Zusätzlich existiert ein Simulator-Modus, der eine WAV-Datei als Audioquelle verwendet — nützlich für Entwicklung und Tests ohne physische Hardware.
+Dieses Projekt implementiert ein Sound Pressure Level (SPL) Meter auf einem Raspberry Pi Zero W mit einem ICS43434 I2S-Mikrofon. Die Messwerte werden über ein Flask-basiertes Web-Interface in Echtzeit angezeigt. Zusätzlich existiert ein Simulator-Modus, der eine WAV-Datei als Audioquelle verwendet — nützlich für Entwicklung und Tests ohne physische Hardware.
 
 ## Systemarchitektur
 
@@ -69,7 +69,8 @@ Implementiert dieselbe Schnittstelle wie `AudioDeviceManager` (gleiche `latest_*
 | POST | `/leq_duration` | Leq-Dauer wählen (Index 0–5) |
 | POST | `/calibrate` | Mikrofon kalibrieren |
 | POST | `/store_recording` | WAV-Aufnahme aktivieren |
-| POST | `/num_bands` | Anzahl Filterbänder setzen (4/6/8/10) |
+| POST | `/set_third_octave_bands` | Terz-Filterbänder aktivieren |
+| POST | `/num_bands` | Anzahl Filterbänder setzen (4/6/8/10/12/36) |
 
 ## Technische Spezifikationen
 

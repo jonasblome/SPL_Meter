@@ -387,13 +387,15 @@ HTML_PAGE_TAIL = """
             
             if (currentNumBands > 10)
             {
-                setNumBands(checked ? 36 : 12);
+                newNumBands = checked ? 36 : 12;
+                setNumBands(newNumBands);
+                document.getElementById('num-bands').value = newNumBands;
             }
         }
 
         function setNumBands(value) {
             const numBands = Number(value);
-            fetch('/num_bands', {
+            fetch('/set_num_bands', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({num_bands: numBands})
@@ -674,11 +676,11 @@ class UIHandler:
             device_manager.show_third_octave_bands = bool(data.get("set_third_octave_bands", False))
             return jsonify({"set_third_octave_bands": device_manager.show_third_octave_bands})
 
-        @self.app.route("/num_bands", methods=["POST"])
-        def num_bands():
+        @self.app.route("/set_num_bands", methods=["POST"])
+        def set_num_bands():
             data = request.get_json()
-            num_bands = int(data.get("num_bands", 36))
-            device_manager.set_num_bands(num_bands)
+            num_bands = int(data.get("num_bands", 12))
+            num_bands = device_manager.set_num_bands(num_bands)
             print(f"Number of bands set to {num_bands}")
             return jsonify({"num_bands": num_bands})
 
