@@ -92,9 +92,13 @@ class MeasurementExporter:
         the center frequencies returned here.
         """
         return {
-            "center_frequency_hz": [
+            "center_frequency_hz_octaves": [
                 float(frequency)
                 for frequency in helpers.frequency_weights_octave.keys()
+            ],
+            "center_frequency_hz_octaves": [
+                float(frequency)
+                for frequency in helpers.frequency_weights_3rd_octave.keys()
             ],
             "unit": "dB SPL",
             "time_series_key": "filterband_spl_db",

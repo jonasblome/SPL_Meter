@@ -79,7 +79,7 @@ class TestAudioDeviceManager(unittest.TestCase):
         mock_pyaudio.paContinue = 1
 
         with patch('builtins.print') as mock_print:
-            result = manager._audio_callback(test_data, len(test_samples), None, None)
+            result = manager.audio_callback(test_data, len(test_samples), None, None)
             self.assertEqual(len(result), 2)
             self.assertEqual(result[1], mock_pyaudio.paContinue)
 

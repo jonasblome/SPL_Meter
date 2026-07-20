@@ -296,3 +296,19 @@ Der JSON-Export wurde so erweitert, dass neben aktuellen Ergebniswerten auch der
 **Status:** Leq, LAeq, Fast/Slow-Anzeige und JSON-Export funktional umgesetzt und für Dokumentation vorbereitet.
 
 ---
+
+## Datum: 17.07.2026
+
+### Ziele der Session
+- Toggle Button für Terzbänder
+- Wechsel zwischen Berechnung von Oktav- und Terzbändern
+
+### Erledigte Aufgaben
+- Reduktion der UI-Framerate für bessere Lesbarkeit der Pegelwerte
+- Togglebutton für Terzbänder-Darstellung
+- Mehr Filterbänder zur UI hinzugefügt
+- Filterband Frequenz Text wird jetzt dynamisch hinzugefügt
+- Anzahl Bänder wird automatisch gesetzt wenn zwischen Oktav und Terz gewechselt wird,
+  außer der gesetzte Wert ist <12
+
+---

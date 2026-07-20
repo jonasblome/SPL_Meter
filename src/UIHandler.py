@@ -6,6 +6,9 @@ from flask import Flask, Response, request, jsonify
 from MeasurementExporter import MeasurementExporter
 from datetime import datetime
 
+
+UPDATE_RATE = 20
+
 HTML_PAGE_HEAD = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,14 +21,16 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
         h3 { color: #333; }
         .controls { display: flex; gap: 12px; margin: 20px 0; align-items: center; }
         button { padding: 10px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; }
+
         #btn-start { background: #4CAF50; color: white; }
         #btn-stop  { background: #f44336; color: white; }
         #btn-start:disabled, #btn-stop:disabled { opacity: 0.4; cursor: default; }
+
         #calibration-div  { margin: 20px 0px; }
+
         #leq-div {
             margin: 20px 0px;
         }
-
         .leq-controls {
             display: flex;
             align-items: center;
@@ -33,14 +38,12 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             flex-wrap: wrap;
             margin: 20px 0 16px 0;
         }
-
         .leq-results {
             display: grid;
             grid-template-columns: repeat(2, minmax(140px, 180px));
             gap: 16px;
             margin-top: 12px;
         }
-
         #leq-result,
         #laeq-result {
             width: auto;
@@ -53,15 +56,19 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             }
         }
         .store-toggle { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 16px; cursor: pointer; }
+
         .status { font-size: 18px; font-weight: bold; margin: 16px 0; }
         .status.running { color: #4CAF50; }
         .status.stopped { color: #f44336; }
+
         .framerate { font-size: 14px; color: #666; margin: 4px 0; }
         .hint { font-size: 13px; color: #888; margin-left: 8px; }
+
         .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px; margin-top: 24px; }
         .metric-box { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .metric-label { font-size: 13px; color: #666; margin-bottom: 8px; }
         .metric-value { font-size: 28px; font-weight: bold; color: #333; }
+
         .level-meter {
             margin-top: 12px; }
         .level-bar {
@@ -81,20 +88,21 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             font-size: 11px;
             color: #666;
             margin-top: 4px;}
+
         .filterband-section { margin-top: 24px; }
         .filterband-grid { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-        .filterband-box { display: flex; flex-direction: column; align-items: center; width: 60px; }
+        .filterband-box { display: flex; flex-direction: column; align-items: center; width: 15px; }
         .filterband-value {
-            font-size: 14px;
+            font-size: 6px;
             font-weight: bold;
             margin-bottom: 4px;
             white-space: nowrap;
             text-align: center;
             line-height: 1.2;
         }
-        .filterband-bar-container { display: flex; flex-direction: column-reverse; width: 30px; height: 150px; background: #f0f2f6; border-radius: 4px; border: 1px solid #e1e4e8; }
+        .filterband-bar-container { display: flex; flex-direction: column-reverse; width: 10px; height: 200px; background: #f0f2f6; border-radius: 4px; border: 1px solid #e1e4e8; }
         .filterband-bar-fill { background: #ff4b4b; border-radius: 0 0 4px 4px; width: 100%; transition: height 0.05s linear; will-change: height; }
-        .filterband-freq { font-size: 12px; color: #666; margin-top: 4px; }
+        .filterband-freq { font-size: 6px; color: #666; margin-top: 4px; }
         hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
     </style>
 </head>
@@ -121,7 +129,9 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
             <option value="4">4</option>
             <option value="6">6</option>
             <option value="8">8</option>
-            <option value="10" selected>10</option>
+            <option value="10">10</option>
+            <option value="12" selected>12</option>
+            <option value="36">36</option>
         </select>
         <span class="hint">More bands look nicer but need more processing power.</span>
     </div>
@@ -273,8 +283,13 @@ HTML_PAGE_HEAD = """<!DOCTYPE html>
     <hr>
     
     <div class="filterband-section">
-    <h3>Filterband SPL Levels (dB)</h3>
-    <div class="filterband-grid" id="filterband-grid">
+        <h3>Filterband SPL Levels (dB)</h3>
+
+        <label class="filterband-toggle">
+            <input type="checkbox" onchange="setThirdOctaveBands(this.checked)">
+            Show 1/3rd Octave Bands
+        </label>
+        <div class="filterband-grid" id="filterband-grid">
 """
 
 HTML_PAGE_TAIL = """
@@ -282,7 +297,7 @@ HTML_PAGE_TAIL = """
     </div>
     <script>
         let evtSource = null;
-        const TARGET_FPS = 60;
+        const TARGET_FPS = 15;
         let fpsHistory = [];
 
         function updateFramerate() {
@@ -366,9 +381,21 @@ HTML_PAGE_TAIL = """
             fetch('/store_recording', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({store: checked})});
         }
 
+        function setThirdOctaveBands(checked) {
+            fetch('/set_third_octave_bands', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({set_third_octave_bands: checked})});
+            currentNumBands = document.getElementById('num-bands').value;
+            
+            if (currentNumBands > 10)
+            {
+                newNumBands = checked ? 36 : 12;
+                setNumBands(newNumBands);
+                document.getElementById('num-bands').value = newNumBands;
+            }
+        }
+
         function setNumBands(value) {
             const numBands = Number(value);
-            fetch('/num_bands', {
+            fetch('/set_num_bands', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({num_bands: numBands})
@@ -377,7 +404,7 @@ HTML_PAGE_TAIL = """
         }
 
         function updateBandVisibility(numBands) {
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < 36; i++) {
                 const box = document.getElementById('band-' + i);
                 if (box) {
                     box.style.display = i < numBands ? 'flex' : 'none';
@@ -416,11 +443,11 @@ HTML_PAGE_TAIL = """
             evtSource.onmessage = function(e) {
                 updateFramerate();
                 const d = JSON.parse(e.data);
-                document.getElementById('peak').textContent = d.peak.toFixed(2);
-                document.getElementById('rms').textContent  = d.rms.toFixed(2);
+                document.getElementById('peak').textContent = d.peak.toFixed(1);
+                document.getElementById('rms').textContent  = d.rms.toFixed(1);
 
                 if (d.spl_db !== null && d.spl_db !== undefined) {
-                    document.getElementById('spl_db').textContent = d.spl_db.toFixed(2) + ' dB';
+                    document.getElementById('spl_db').textContent = d.spl_db.toFixed(1) + ' dB';
                     updateLevelBar('spl-db-bar', d.spl_db);
                 } else {
                     document.getElementById('spl_db').textContent = '-- dB';
@@ -428,7 +455,7 @@ HTML_PAGE_TAIL = """
                 }
 
                 if (d.a_weighted !== null && d.a_weighted !== undefined) {
-                    document.getElementById('a_weighted').textContent = d.a_weighted.toFixed(2) + ' dB';
+                    document.getElementById('a_weighted').textContent = d.a_weighted.toFixed(1) + ' dB';
                     updateLevelBar('a-weighted-bar', d.a_weighted);
                 } else {
                     document.getElementById('a_weighted').textContent = '-- dB';
@@ -436,7 +463,7 @@ HTML_PAGE_TAIL = """
                 }
 
                 if (d.fast !== null && d.fast !== undefined) {
-                    document.getElementById('fast').textContent = d.fast.toFixed(2) + ' dB';
+                    document.getElementById('fast').textContent = d.fast.toFixed(1) + ' dB';
                     updateLevelBar('fast-bar', d.fast);
                 } else {
                     document.getElementById('fast').textContent = '-- dB';
@@ -444,7 +471,7 @@ HTML_PAGE_TAIL = """
                 }
 
                 if (d.slow !== null && d.slow !== undefined) {
-                    document.getElementById('slow').textContent = d.slow.toFixed(2) + ' dB';
+                    document.getElementById('slow').textContent = d.slow.toFixed(1) + ' dB';
                     updateLevelBar('slow-bar', d.slow);
                 } else {
                     document.getElementById('slow').textContent = '-- dB';
@@ -454,19 +481,19 @@ HTML_PAGE_TAIL = """
                 if (d.leq_is_running) {
                     document.getElementById('leq').textContent = 'running...';
                 } else if (d.leq_db !== null) {
-                    document.getElementById('leq').textContent = d.leq_db.toFixed(2) + ' dB';
+                    document.getElementById('leq').textContent = d.leq_db.toFixed(1) + ' dB';
                 }
                 if (d.laeq_is_running) {
                     document.getElementById('laeq').textContent = 'running...';
                 } else if (d.laeq_db !== null && d.laeq_db !== undefined) {
-                    document.getElementById('laeq').textContent = d.laeq_db.toFixed(2) + ' dB';
+                    document.getElementById('laeq').textContent = d.laeq_db.toFixed(1) + ' dB';
                 }
                 if (d.calibration) {
                     let calibrationText = d.calibration.status;
 
                     if (d.calibration.active) {
                         calibrationText +=
-                            ' | 1 kHz: ' + d.calibration.band_spl_db.toFixed(2) + ' dB';
+                            ' | 1 kHz: ' + d.calibration.band_spl_db.toFixed(1) + ' dB';
                     }
 
                     document.getElementById('calibration-status').textContent = calibrationText;
@@ -478,6 +505,12 @@ HTML_PAGE_TAIL = """
                         const value = document.getElementById('band-' + i + '-value');
                         if (fill) fill.style.height = (normalized * 100).toFixed(1) + '%';
                         if (value) value.textContent = spl.toFixed(1) + '\u00A0dB';
+                    });
+                }
+                if (d.filterbank_freqs) {
+                    d.filterbank_freqs.forEach((hz, i) => {
+                        const freq = document.getElementById('band-' + i + '-freq');
+                        if (freq) freq.textContent = hz + 'Hz';
                     });
                 }
             };
@@ -507,7 +540,6 @@ class UIHandler:
         self.host = host
         self.port = port
 
-
     def get_leq_duration_seconds(self):
         """Return the currently selected Leq measurement duration in seconds."""
         return self.leq_durations_seconds[self.leq_duration_index]
@@ -527,9 +559,9 @@ class UIHandler:
             f'<div class="filterband-bar-container">'
             f'<div class="filterband-bar-fill" id="band-{i}-fill" style="height: 0%;"></div>'
             f'</div>'
-            f'<div class="filterband-freq">{freq} Hz</div>'
+            f'<div class="filterband-freq" id="band-{i}-freq"></div>'
             f'</div>'
-            for i, freq in enumerate(helpers.frequency_weights_octave.keys())
+            for i, freq in enumerate(helpers.frequency_weights_3rd_octave.keys())
         )
         return HTML_PAGE_HEAD + boxes + HTML_PAGE_TAIL
 
@@ -637,12 +669,18 @@ class UIHandler:
             data = request.get_json()
             device_manager.should_store_recording = bool(data.get("store", False))
             return jsonify({"store": device_manager.should_store_recording})
-
-        @self.app.route("/num_bands", methods=["POST"])
-        def num_bands():
+        
+        @self.app.route("/set_third_octave_bands", methods=["POST"])
+        def set_third_octave_bands():
             data = request.get_json()
-            num_bands = int(data.get("num_bands", 10))
-            device_manager.set_num_bands(num_bands)
+            device_manager.show_third_octave_bands = bool(data.get("set_third_octave_bands", False))
+            return jsonify({"set_third_octave_bands": device_manager.show_third_octave_bands})
+
+        @self.app.route("/set_num_bands", methods=["POST"])
+        def set_num_bands():
+            data = request.get_json()
+            num_bands = int(data.get("num_bands", 12))
+            num_bands = device_manager.set_num_bands(num_bands)
             print(f"Number of bands set to {num_bands}")
             return jsonify({"num_bands": num_bands})
 
@@ -663,6 +701,7 @@ class UIHandler:
                         "slow":          device_manager.latest_slow_state,
 
                         # Current filterband values for the bar display
+                        "filterbank_freqs": device_manager.active_filterbank_freqs,
                         "filterband_spl_db": device_manager.latest_filterband_spl_db,
 
                         # Fixed-duration Leq status and result
@@ -687,7 +726,7 @@ class UIHandler:
                     },
                 })
                     yield f"data: {payload}\n\n"
-                    time.sleep(0.0167)  # ~60 Hz update rate
+                    time.sleep(1 / UPDATE_RATE)
             
             response = Response(
                 event_generator(),
